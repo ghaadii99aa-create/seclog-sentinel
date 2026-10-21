@@ -5,7 +5,26 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint
+        run: ruff check .
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -25,10 +44,10 @@ jobs:
       - name: Run unit tests
         run: python -m unittest discover -s tests -t . -v
 
-      - name: Analyze the sample log
-        run: python -m seclog sample_data/auth.log --year 2026 --html report.html --json report.json
+      - name: Analyze the sample log from the command line
+        run: python -m seclog sample_data/auth.log --year 2026 --html report.html --json report.json --csv findings.csv --events-csv events.csv
 
-      - name: Upload sample report
+      - name: Upload sample reports
         if: matrix.python-version == '3.13'
         uses: actions/upload-artifact@v4
         with:
@@ -36,3 +55,37 @@ jobs:
           path: |
             report.html
             report.json
+            findings.csv
+            events.csv
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t seclog-sentinel .
+
+      - name: Start the container
+        run: docker run -d --name seclog -p 8000:8000 seclog-sentinel
+
+      - name: Wait for the health check
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/healthz; then exit 0; fi
+            sleep 1
+          done
+          docker logs seclog
+          exit 1
+
+      - name: Smoke test the running container
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8000/analyze/sample)
+          test "$code" = "303"
+          curl -fsS -F file=@sample_data/auth.log -F year=2026 http://127.0.0.1:8000/api/analyze \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); assert len(d['findings'])==5, d['summary']; print('API ok:', d['summary']['findings_by_severity'])"
+
+      - name: Show container logs
+        if: always()
+        run: docker logs seclog

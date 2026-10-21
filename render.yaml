@@ -12,8 +12,10 @@ services:
       # The free plan erases local files when the server idles, so the app words its notices accordingly.
       - key: SECLOG_EPHEMERAL
         value: "1"
+      - key: SECLOG_LOG_LEVEL
+        value: INFO
       - key: SECLOG_DB
         value: /tmp/seclog.db
-      # Optional: shows a "View the source code" link in the footer. Replace ghaadii99aa-create.
+      # Optional: shows a "View the source code" link in the footer.
       - key: SECLOG_REPO_URL
         value: https://github.com/ghaadii99aa-create/seclog-sentinel

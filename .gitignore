@@ -15,3 +15,10 @@ venv/
 
 # Local web app database
 /data/
+
+# Local environment files
+.env
+
+# Generated CSV reports
+/findings.csv
+/events.csv
