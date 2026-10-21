@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import secrets
 import threading
@@ -20,10 +21,20 @@ from .. import __version__
 from ..analyzer import analyze
 from ..models import Analysis, Thresholds
 from ..parser import parse_log
-from ..report import render_html, render_json
+from ..report import render_events_csv, render_findings_csv, render_html, render_json
 from .storage import RETENTION_DAYS, Store
 
+log = logging.getLogger("seclog")
+
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+MAX_TABLE_ROWS = 200
+KNOWN_RULES = (
+    "brute_force",
+    "password_spraying",
+    "success_after_failures",
+    "privileged_external_login",
+)
+SEVERITIES = ("critical", "high", "medium", "low")
 SAMPLE_LOG = Path(__file__).resolve().parents[2] / "sample_data" / "auth.log"
 SAMPLE_YEAR = 2026
 COOKIE_NAME = "sid"
@@ -92,6 +103,8 @@ def read_settings(values) -> Tuple[Thresholds, int, Dict[str, Any]]:
     bf_window = _int_field(values, "brute_force_window", "Brute-force window", 5, 1, 1440)
     spray_users = _int_field(values, "spray_users", "Spraying threshold", 5, 2, 1000)
     spray_window = _int_field(values, "spray_window", "Spraying window", 10, 1, 1440)
+    comp_failures = _int_field(values, "compromise_failures", "Takeover threshold", 3, 1, 1000)
+    comp_window = _int_field(values, "compromise_window", "Takeover window", 10, 1, 1440)
 
     privileged = [name[:64] for name in _list_field(values, "privileged", "Privileged accounts")]
     networks = _list_field(values, "internal_networks", "Internal networks")
@@ -106,6 +119,8 @@ def read_settings(values) -> Tuple[Thresholds, int, Dict[str, Any]]:
         brute_force_window=timedelta(minutes=bf_window),
         spray_users=spray_users,
         spray_window=timedelta(minutes=spray_window),
+        compromise_failures=comp_failures,
+        compromise_window=timedelta(minutes=comp_window),
         privileged_users=Thresholds.privileged_users | frozenset(privileged),
         internal_networks=Thresholds.internal_networks + tuple(networks),
     )
@@ -115,6 +130,8 @@ def read_settings(values) -> Tuple[Thresholds, int, Dict[str, Any]]:
         "brute_force_window_minutes": bf_window,
         "spray_users": spray_users,
         "spray_window_minutes": spray_window,
+        "compromise_failures": comp_failures,
+        "compromise_window_minutes": comp_window,
         "privileged_users": sorted(thresholds.privileged_users),
         "internal_networks": list(thresholds.internal_networks),
     }
@@ -124,10 +141,21 @@ def read_settings(values) -> Tuple[Thresholds, int, Dict[str, Any]]:
 # --------------------------------------------------------------------------- analysis
 
 
+def validate_content(raw: bytes) -> None:
+    """Reject files that cannot be a text log before any parsing happens."""
+    if not raw.strip():
+        raise LogError("The file is empty. Choose a log file that contains SSH login lines.")
+    if raw[:2] == b"\x1f\x8b":
+        raise LogError("This file is compressed (gzip). Decompress it first, for example with gunzip auth.log.2.gz.")
+    if b"\x00" in raw[:8192]:
+        raise LogError("This looks like a binary file, not a text log. Upload a plain-text sshd log.")
+
+
 def run_analysis(raw: bytes, values, year_override: Optional[int] = None) -> Dict[str, Any]:
     thresholds, year, settings = read_settings(values)
     if year_override is not None:
         year = settings["year"] = year_override
+    validate_content(raw)
     text = raw.decode("utf-8", errors="replace")
     parsed = parse_log(text.splitlines(), year=year)
     if not parsed.events:
@@ -207,12 +235,82 @@ def build_chart(hourly: List[Dict[str, int]]) -> Dict[str, Any]:
                 "failed_y": round(baseline - failed_h, 1),
                 "accepted_h": accepted_h,
                 "accepted_y": round(baseline - failed_h - accepted_h, 1),
+                "hour": h["hour"],
                 "label": f"{h['hour']:02d}",
                 "show_label": h["hour"] % 3 == 0,
                 "tip": f"{h['hour']:02d}:00 - {h['failed']} failed, {h['accepted']} accepted",
             }
         )
     return {"bars": bars, "peak": peak, "baseline": baseline}
+
+
+def build_severity_bars(counts: Dict[str, int]) -> List[Dict[str, Any]]:
+    """Rows for the severity distribution chart (SVG widths are percentages)."""
+    peak = max(counts.values(), default=0) or 1
+    return [
+        {"name": name, "count": counts[name], "width": round(counts[name] / peak * 100, 1)}
+        for name in SEVERITIES
+    ]
+
+
+def read_filters(args) -> Dict[str, Any]:
+    """Validate dashboard filter parameters. Unknown values are ignored, never trusted."""
+    severity = args.get("severity", "")
+    rule = args.get("rule", "")
+    hour_raw = (args.get("hour") or "").strip()
+    hour = int(hour_raw) if hour_raw.isdigit() and 0 <= int(hour_raw) <= 23 else None
+    return {
+        "severity": severity if severity in SEVERITIES else "",
+        "rule": rule if rule in KNOWN_RULES else "",
+        "hour": hour,
+        "q": (args.get("q") or "").strip()[:64],
+    }
+
+
+def _hours_covered(first: datetime, last: datetime) -> set:
+    if (last - first) >= timedelta(hours=24):
+        return set(range(24))
+    hours, cursor = set(), first.replace(minute=0, second=0, microsecond=0)
+    while cursor <= last:
+        hours.add(cursor.hour)
+        cursor += timedelta(hours=1)
+    return hours
+
+
+def filter_findings(findings: List[Dict[str, Any]], f: Dict[str, Any]) -> List[Dict[str, Any]]:
+    needle = f["q"].lower()
+    result = []
+    for item in findings:
+        if f["severity"] and item["severity"] != f["severity"]:
+            continue
+        if f["rule"] and item["rule"] != f["rule"]:
+            continue
+        if f["hour"] is not None and f["hour"] not in _hours_covered(
+            datetime.fromisoformat(item["first_seen"]), datetime.fromisoformat(item["last_seen"])
+        ):
+            continue
+        if needle:
+            haystack = " ".join([item["title"], item["ip"], " ".join(item["users"]), item["description"]]).lower()
+            if needle not in haystack:
+                continue
+        result.append(item)
+    return result
+
+
+def filter_events(events: List[Dict[str, Any]], f: Dict[str, Any]) -> List[Dict[str, Any]]:
+    needle = f["q"].lower()
+    result = []
+    for item in events:
+        if f["severity"] and item["severity"] != f["severity"]:
+            continue
+        if f["rule"] and f["rule"] not in item["rules"]:
+            continue
+        if f["hour"] is not None and int(item["time"][11:13]) != f["hour"]:
+            continue
+        if needle and needle not in " ".join([item["user"], item["ip"], item["type"], item["reason"]]).lower():
+            continue
+        result.append(item)
+    return result
 
 
 # --------------------------------------------------------------------------- app factory
@@ -224,11 +322,20 @@ def create_app(
     rate_limit: Tuple[int, int] = (30, 600),
 ) -> Flask:
     app = Flask(__name__)
-    app.config["MAX_CONTENT_LENGTH"] = max_upload_bytes
+    # The request limit leaves room for multipart framing; the file itself is capped below.
+    app.config["MAX_CONTENT_LENGTH"] = max_upload_bytes + 64 * 1024
     app.config["JSON_SORT_KEYS"] = False
 
     if os.environ.get("SECLOG_TRUST_PROXY") == "1":
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)  # type: ignore[assignment]
+
+    level = os.environ.get("SECLOG_LOG_LEVEL", "INFO").upper()
+    if not log.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+        log.addHandler(handler)
+        log.propagate = False
+    log.setLevel(getattr(logging, level, logging.INFO))
 
     store = Store(db_path or os.environ.get("SECLOG_DB", "data/seclog.db"))
     limiter = RateLimiter(*rate_limit)
@@ -285,6 +392,8 @@ def create_app(
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         if request.is_secure:
             response.headers["Strict-Transport-Security"] = "max-age=31536000"
         if not request.path.startswith("/static/"):
@@ -317,15 +426,45 @@ def create_app(
             return jsonify(error=message), code
         return render_template("error.html", status=code, message=message), code
 
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(error: Exception):
+        # Log the details server-side, never show a traceback or internals to the visitor.
+        log.exception("unhandled error on %s %s", request.method, request.path)
+        message = "Something went wrong on our side. Try again, and if it keeps happening, open an issue."
+        if wants_json():
+            return jsonify(error=message), 500
+        return render_template("error.html", status=500, message=message), 500
+
     # ----- helpers
 
     def check_rate_limit() -> None:
         if not limiter.allow(request.remote_addr or "unknown"):
             abort(429)
 
+    def read_upload(upload) -> bytes:
+        raw = upload.read(max_upload_bytes + 1)
+        if len(raw) > max_upload_bytes:
+            abort(413)
+        return raw
+
     def store_result(raw: bytes, filename: str, year_override: Optional[int] = None) -> str:
+        started = time.monotonic()
         data = run_analysis(raw, request.form, year_override)
-        return store.save(g.sid, filename, data)
+        analysis_id = store.save(g.sid, filename, data)
+        summary = data["summary"]
+        # Counts only: file names, usernames and addresses are not written to the server log.
+        log.info(
+            "analysis id=%s bytes=%d events=%d findings=%d ms=%d",
+            analysis_id, len(raw), summary["total_events"], sum(summary["findings_by_severity"].values()),
+            (time.monotonic() - started) * 1000,
+        )
+        return analysis_id
+
+    def csv_response(body: str, filename: str) -> Response:
+        response = make_response(body)
+        response.headers["Content-Type"] = "text/csv; charset=utf-8"
+        response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
     def render_index(error: Optional[str] = None, status: int = 200):
         return render_template("index.html", error=error, form=request.form), status
@@ -343,10 +482,10 @@ def create_app(
         if upload is None or not upload.filename:
             return render_index("Choose a log file to analyze.", 400)
         try:
-            analysis_id = store_result(upload.read(), clean_filename(upload.filename))
+            analysis_id = store_result(read_upload(upload), clean_filename(upload.filename))
         except (SettingsError, LogError) as exc:
             return render_index(str(exc), 400)
-        return redirect(url_for("view_analysis", analysis_id=analysis_id), code=303)
+        return redirect(url_for("view_analysis", analysis_id=analysis_id, done=1), code=303)
 
     @app.post("/analyze/sample")
     def analyze_sample():
@@ -354,12 +493,16 @@ def create_app(
         if not SAMPLE_LOG.exists():
             abort(404)
         analysis_id = store_result(SAMPLE_LOG.read_bytes(), "sample auth.log", SAMPLE_YEAR)
-        return redirect(url_for("view_analysis", analysis_id=analysis_id), code=303)
+        return redirect(url_for("view_analysis", analysis_id=analysis_id, done=1), code=303)
 
     @app.get("/a/<analysis_id>")
     def view_analysis(analysis_id: str):
         row = store.get(analysis_id) or abort(404)
         data = row["data"]
+        filters = read_filters(request.args)
+        findings = filter_findings(data["findings"], filters)
+        events_all = filter_events(data.get("events", []), filters)
+        events = list(reversed(events_all))[:MAX_TABLE_ROWS]  # newest first
         expires = datetime.fromtimestamp(row["created_at"]) + timedelta(days=RETENTION_DAYS)
         return render_template(
             "analysis.html",
@@ -368,8 +511,18 @@ def create_app(
             verdict=build_verdict(data),
             blocklist=build_blocklist(data),
             chart=build_chart(data["hourly"]),
+            severity_bars=build_severity_bars(data["summary"]["findings_by_severity"]),
+            recent=list(reversed(data.get("events", [])))[:6],
+            filters=filters,
+            filtered=any(v not in ("", None) for v in filters.values()),
+            findings=findings,
+            events=events,
+            events_matching=len(events_all),
+            events_truncated=len(data.get("events", [])) < data["summary"].get("suspicious_events", 0),
+            rules=KNOWN_RULES,
             is_owner=row["owner"] == g.sid,
             expires=expires,
+            just_finished=request.args.get("done") == "1",
         )
 
     @app.get("/a/<analysis_id>/report.html")
@@ -388,6 +541,16 @@ def create_app(
         response.headers["Content-Type"] = "application/json"
         response.headers["Content-Disposition"] = f'attachment; filename="seclog-report-{analysis_id}.json"'
         return response
+
+    @app.get("/a/<analysis_id>/report.csv")
+    def download_csv(analysis_id: str):
+        row = store.get(analysis_id) or abort(404)
+        return csv_response(render_findings_csv(Analysis.from_dict(row["data"])), f"seclog-findings-{analysis_id}.csv")
+
+    @app.get("/a/<analysis_id>/events.csv")
+    def download_events_csv(analysis_id: str):
+        row = store.get(analysis_id) or abort(404)
+        return csv_response(render_events_csv(Analysis.from_dict(row["data"])), f"seclog-events-{analysis_id}.csv")
 
     @app.post("/a/<analysis_id>/delete")
     def delete_analysis(analysis_id: str):
@@ -414,7 +577,7 @@ def create_app(
         if upload is None:
             return jsonify(error="Send the log as multipart form data in a field named 'file'."), 400
         try:
-            analysis_id = store_result(upload.read(), clean_filename(upload.filename))
+            analysis_id = store_result(read_upload(upload), clean_filename(upload.filename))
         except (SettingsError, LogError) as exc:
             return jsonify(error=str(exc)), 400
         row = store.get(analysis_id)

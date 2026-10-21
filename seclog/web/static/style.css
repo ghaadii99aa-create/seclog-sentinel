@@ -326,3 +326,66 @@ table.history { max-width: none; }
 @media (prefers-color-scheme: dark) {
   .evidence { --e-bg: #091116; border: 1px solid var(--rule); }
 }
+
+/* ---------- Dashboard ---------- */
+
+.notice-ok {
+  margin: 0 0 1rem; padding: 0.6rem 0.9rem;
+  border-left: 5px solid var(--ok); background: var(--field); color: var(--ink);
+}
+.caveat { color: var(--muted); max-width: 60ch; margin: 0.5rem 0 0; }
+
+.kpis { display: grid; gap: 0.75rem; margin: 0 0 1.25rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 40rem) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 62rem) { .kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.kpi { margin: 0; padding: 0.85rem 1rem; background: var(--field); border: 1px solid var(--rule); border-radius: 3px; }
+.kpi dt { color: var(--muted); font-size: 0.9rem; }
+.kpi dd { margin: 0.15rem 0 0; font: 700 1.9rem/1.1 var(--serif); font-variant-numeric: tabular-nums; }
+.kpi-flag dd { color: var(--crit); }
+
+.dash { display: grid; gap: 1rem; }
+@media (min-width: 52rem) { .dash { grid-template-columns: 1fr 1fr; } }
+.dash-card { background: var(--field); border: 1px solid var(--rule); border-radius: 3px; padding: 1rem 1.1rem; }
+.dash-card h3 { margin: 0 0 0.6rem; font: 700 1.1rem/1.3 var(--serif); }
+
+.sevchart { display: block; width: 100%; max-width: 26rem; height: auto; }
+.sevchart a { cursor: pointer; }
+.sevchart .hit { fill: transparent; }
+.sevchart a:hover .hit, .sevchart a:focus .hit { fill: var(--rule); opacity: 0.45; }
+.sevchart a:hover .sev-track, .sevchart a:focus .sev-track { stroke: var(--ink); }
+.sev-label, .sev-count { fill: var(--ink); font: 13px var(--sans); }
+.sev-count { text-anchor: end; font-variant-numeric: tabular-nums; }
+.sev-track { fill: none; stroke: var(--rule); stroke-width: 1; }
+.sevfill-critical { fill: var(--crit); }
+.sevfill-high { fill: var(--high); }
+.sevfill-medium { fill: var(--med); }
+.sevfill-low { fill: var(--low); }
+
+.recent { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.recent li { --c: var(--muted); border-left: 4px solid var(--c); padding: 0.1rem 0 0.1rem 0.7rem; display: grid; gap: 0 0.6rem; grid-template-columns: auto 1fr; font-size: 0.95rem; }
+.recent .sev { font-weight: 700; color: var(--c); }
+.recent .rtime { color: var(--muted); }
+.recent .rwhat { grid-column: 1 / -1; overflow-wrap: anywhere; }
+
+.chart a { cursor: pointer; }
+.chart .hit { fill: transparent; }
+.chart a:hover .hit, .chart a:focus .hit, .chart a.hour-on .hit { fill: var(--rule); opacity: 0.55; }
+
+.filters { display: grid; gap: 0.75rem; margin: 0 0 1rem; grid-template-columns: 1fr 1fr; align-items: end; }
+@media (min-width: 52rem) { .filters { grid-template-columns: 2fr 1fr 1fr 1fr auto; } }
+.filters label { display: grid; gap: 0.3rem; font-size: 0.9rem; color: var(--muted); }
+.filters input, .filters select {
+  font: 1rem var(--sans); color: var(--ink); background: var(--field);
+  border: 1px solid var(--rule); border-radius: 3px; padding: 0.5rem 0.6rem; width: 100%;
+}
+.filters label:first-child { grid-column: 1 / -1; }
+@media (min-width: 52rem) { .filters label:first-child { grid-column: auto; } }
+.filter-actions { display: flex; gap: 0.75rem; align-items: center; grid-column: 1 / -1; }
+@media (min-width: 52rem) { .filter-actions { grid-column: auto; } }
+.filter-actions .btn-quiet { padding: 0.55rem 1rem; }
+
+.assess { color: var(--ink); }
+.table-wrap { overflow-x: auto; }
+table.events { max-width: none; min-width: 42rem; font-size: 0.95rem; }
+table.events td { vertical-align: top; }
+.events tr[hidden] { display: none; }

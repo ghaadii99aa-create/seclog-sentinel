@@ -56,6 +56,26 @@
     });
   }
 
+  // Live search on the rows already on the page. The form still filters on the server without JS.
+  var search = document.getElementById("filter-q");
+  var rows = document.querySelectorAll("#events-table tbody tr, .findings .finding");
+  var emptyNote = document.getElementById("events-empty");
+  if (search && rows.length) {
+    search.addEventListener("input", function () {
+      var needle = search.value.trim().toLowerCase();
+      var shownEvents = 0;
+      rows.forEach(function (row) {
+        var match = !needle || (row.getAttribute("data-filter-text") || "").toLowerCase().indexOf(needle) !== -1;
+        row.hidden = !match;
+        if (match && row.tagName === "TR") shownEvents += 1;
+      });
+      if (emptyNote) emptyNote.hidden = shownEvents !== 0 || !needle;
+    });
+    search.form.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && event.target === search) { search.form.submit(); }
+    });
+  }
+
   var copy = document.getElementById("copy-blocklist");
   var list = document.getElementById("blocklist");
   if (copy && list && navigator.clipboard) {

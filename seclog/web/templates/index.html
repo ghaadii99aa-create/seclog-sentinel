@@ -34,6 +34,12 @@
           <label>Accounts tried that count as spraying
             <input type="number" name="spray_users" min="2" inputmode="numeric" placeholder="5" value="{{ form.get('spray_users', '') }}">
           </label>
+          <label>Failed logins before a success that looks like a takeover
+            <input type="number" name="compromise_failures" min="1" inputmode="numeric" placeholder="3" value="{{ form.get('compromise_failures', '') }}">
+          </label>
+          <label>Brute-force window, minutes
+            <input type="number" name="brute_force_window" min="1" inputmode="numeric" placeholder="5" value="{{ form.get('brute_force_window', '') }}">
+          </label>
           <label>Extra admin accounts
             <input type="text" name="privileged" placeholder="dba, ops" value="{{ form.get('privileged', '') }}">
           </label>
