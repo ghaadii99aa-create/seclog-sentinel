@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-**Live demo: [YOUR-APP.onrender.com](https://YOUR-APP.onrender.com)** (try the sample log, no sign-up)
+**Live demo: [seclog-sentinel.onrender.com](https://seclog-sentinel.onrender.com)** (try the sample log, no sign-up)
 
 A web app and command-line tool that reads SSH authentication logs, detects credential
 attacks, and explains what to do next. Every finding is mapped to **MITRE ATT&CK**.
@@ -75,10 +75,10 @@ Interactive use is optional. Everything the page does is available over HTTP:
 ```bash
 # Analyze a log (multipart upload). Optional fields: year, brute_force_threshold,
 # brute_force_window, spray_users, spray_window, privileged, internal_networks
-curl -F file=@/var/log/auth.log -F year=2026 https://YOUR-APP.onrender.com/api/analyze
+curl -F file=@/var/log/auth.log -F year=2026 https://seclog-sentinel.onrender.com/api/analyze
 
 # Fetch a stored result
-curl https://YOUR-APP.onrender.com/api/analyses/<id>
+curl https://seclog-sentinel.onrender.com/api/analyses/<id>
 ```
 
 `POST /api/analyze` returns `201` with the analysis, the shareable page URL and the API URL.
