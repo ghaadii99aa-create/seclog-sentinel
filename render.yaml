@@ -14,6 +14,6 @@ services:
         value: "1"
       - key: SECLOG_DB
         value: /tmp/seclog.db
-      # Optional: shows a "View the source code" link in the footer. Replace YOUR-USERNAME.
+      # Optional: shows a "View the source code" link in the footer. Replace ghaadii99aa-create.
       - key: SECLOG_REPO_URL
-        value: https://github.com/YOUR-USERNAME/seclog-sentinel
+        value: https://github.com/ghaadii99aa-create/seclog-sentinel

@@ -1,6 +1,6 @@
 # SecLog Sentinel
 
-[![CI](https://github.com/YOUR-USERNAME/seclog-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR-USERNAME/seclog-sentinel/actions/workflows/ci.yml)
+[![CI](https://github.com/ghaadii99aa-create/seclog-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/ghaadii99aa-create/seclog-sentinel/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -30,7 +30,7 @@ from the web form, the API, or CLI flags.
 ## Run the web app
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/seclog-sentinel.git
+git clone https://github.com/ghaadii99aa-create/seclog-sentinel.git
 cd seclog-sentinel
 pip install -r requirements.txt
 
