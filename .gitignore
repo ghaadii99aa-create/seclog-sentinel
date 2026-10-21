@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.idea/
+.vscode/
+.DS_Store
+
+# Generated reports (the sample log itself is committed on purpose)
+/report.html
+/report.json
+
+# Local web app database
+/data/
