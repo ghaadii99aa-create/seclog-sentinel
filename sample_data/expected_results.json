@@ -1,0 +1,64 @@
+{
+  "auth.log": {
+    "year": 2026,
+    "total_events": 119,
+    "failed": 76,
+    "suspicious_events": 61,
+    "findings": [
+      {
+        "rule": "success_after_failures",
+        "severity": "critical",
+        "ip": "192.0.2.88",
+        "users": [
+          "dr.fahad"
+        ],
+        "count": 8
+      },
+      {
+        "rule": "brute_force",
+        "severity": "high",
+        "ip": "203.0.113.45",
+        "users": [
+          "root"
+        ],
+        "count": 38
+      },
+      {
+        "rule": "privileged_external_login",
+        "severity": "high",
+        "ip": "198.51.100.23",
+        "users": [
+          "sysadmin"
+        ],
+        "count": 1
+      },
+      {
+        "rule": "password_spraying",
+        "severity": "high",
+        "ip": "198.51.100.77",
+        "users_count": 14,
+        "count": 14
+      },
+      {
+        "rule": "brute_force",
+        "severity": "medium",
+        "ip": "192.0.2.88",
+        "users": [
+          "dr.fahad"
+        ],
+        "count": 7
+      }
+    ]
+  },
+  "auth_iso.log": {
+    "same_as": "auth.log",
+    "note": "Same events with ISO 8601 timestamps; the year comes from the line."
+  },
+  "clean.log": {
+    "year": 2026,
+    "total_events": 45,
+    "failed": 5,
+    "suspicious_events": 0,
+    "findings": []
+  }
+}

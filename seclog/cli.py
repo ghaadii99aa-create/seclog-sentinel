@@ -12,7 +12,7 @@ from . import __version__
 from .analyzer import analyze
 from .models import SEVERITY_ORDER, Thresholds
 from .parser import parse_log
-from .report import render_html, render_json
+from .report import render_events_csv, render_findings_csv, render_html, render_json
 
 _COLORS = {
     "critical": "\033[1;31m",
@@ -33,6 +33,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--year", type=int, help="Year of the log (syslog lines have none). Default: current year")
     parser.add_argument("--html", metavar="FILE", help="Write an HTML report to FILE")
     parser.add_argument("--json", metavar="FILE", help="Write a JSON report to FILE")
+    parser.add_argument("--csv", metavar="FILE", help="Write the findings as CSV to FILE")
+    parser.add_argument("--events-csv", metavar="FILE", help="Write the suspicious events as CSV to FILE")
     parser.add_argument(
         "--fail-on",
         choices=sorted(SEVERITY_ORDER, key=SEVERITY_ORDER.get),
@@ -46,6 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Distinct accounts per IP to flag as spraying (default: 5)")
     parser.add_argument("--spray-window", type=int, default=10, metavar="MIN",
                         help="Spraying window in minutes (default: 10)")
+    parser.add_argument("--compromise-failures", type=int, default=3, metavar="N",
+                        help="Failures before a success that is flagged as a likely takeover (default: 3)")
     parser.add_argument("--privileged", action="append", default=[], metavar="USER",
                         help="Additional privileged account name (repeatable)")
     parser.add_argument("--internal-network", action="append", default=[], metavar="CIDR",
@@ -101,6 +105,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         brute_force_window=timedelta(minutes=args.brute_force_window),
         spray_users=args.spray_users,
         spray_window=timedelta(minutes=args.spray_window),
+        compromise_failures=args.compromise_failures,
         privileged_users=Thresholds.privileged_users | frozenset(args.privileged),
         internal_networks=Thresholds.internal_networks + tuple(args.internal_network),
     )
@@ -131,6 +136,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             Path(args.json).write_text(render_json(analysis), encoding="utf-8")
             if not args.quiet:
                 print(f"JSON report written to {args.json}")
+        if args.csv:
+            Path(args.csv).write_text(render_findings_csv(analysis), encoding="utf-8", newline="")
+            if not args.quiet:
+                print(f"Findings CSV written to {args.csv}")
+        if args.events_csv:
+            Path(args.events_csv).write_text(render_events_csv(analysis), encoding="utf-8", newline="")
+            if not args.quiet:
+                print(f"Events CSV written to {args.events_csv}")
     except OSError as exc:
         print(f"seclog: cannot write report: {exc.strerror or exc}", file=sys.stderr)
         return 1

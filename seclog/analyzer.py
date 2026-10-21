@@ -3,10 +3,59 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from typing import Iterable, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .detectors import run_all
-from .models import Analysis, Event, Thresholds
+from .models import SEVERITY_ORDER, Analysis, Event, Finding, Thresholds
+
+# Only events that support a finding are kept, and no more than this many.
+MAX_FLAGGED_EVENTS = 1000
+
+# Which kind of event each rule is built from.
+_RULE_EVENT_KIND = {
+    "brute_force": "failed",
+    "password_spraying": "failed",
+    "success_after_failures": "both",
+    "privileged_external_login": "accepted",
+}
+
+
+def flag_events(
+    events: Sequence[Event], findings: Sequence[Finding], limit: int = MAX_FLAGGED_EVENTS
+) -> Tuple[List[Dict[str, Any]], int]:
+    """Return (flagged events, total). Each event carries the worst finding it supports."""
+    by_ip: Dict[str, List[Finding]] = defaultdict(list)
+    for finding in findings:
+        by_ip[finding.ip].append(finding)
+
+    flagged: List[Dict[str, Any]] = []
+    for event in events:
+        matches = []
+        for finding in by_ip.get(event.ip, ()):
+            kind = _RULE_EVENT_KIND.get(finding.rule, "both")
+            if kind == "failed" and event.success:
+                continue
+            if kind == "accepted" and not event.success:
+                continue
+            if event.user in finding.users and finding.first_seen <= event.timestamp <= finding.last_seen:
+                matches.append(finding)
+        if not matches:
+            continue
+        worst = max(matches, key=lambda f: SEVERITY_ORDER[f.severity])
+        flagged.append(
+            {
+                "time": event.timestamp.isoformat(),
+                "type": "accepted login" if event.success else "failed login",
+                "user": event.user,
+                "ip": event.ip,
+                "method": event.method,
+                "severity": worst.severity,
+                "rules": sorted({m.rule for m in matches}),
+                "reason": worst.title,
+                "recommendation": worst.recommendation,
+            }
+        )
+    return flagged[:limit], len(flagged)
 
 
 def analyze(
@@ -32,6 +81,9 @@ def analyze(
     for e in ordered:
         hourly[e.timestamp.hour]["accepted" if e.success else "failed"] += 1
 
+    findings = run_all(ordered, t)
+    flagged, flagged_total = flag_events(ordered, findings)
+
     return Analysis(
         total_events=len(ordered),
         failed=len(failed_events),
@@ -42,6 +94,8 @@ def analyze(
         end=ordered[-1].timestamp if ordered else None,
         top_sources=top_sources,
         hourly=hourly,
-        findings=run_all(ordered, t),
+        findings=findings,
         ignored_lines=ignored_lines,
+        flagged_events=flagged,
+        flagged_total=flagged_total,
     )

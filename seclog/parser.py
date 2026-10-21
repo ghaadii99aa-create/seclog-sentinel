@@ -6,8 +6,19 @@ Supported line shapes (as written by sshd to /var/log/auth.log or /var/log/secur
     Oct 20 04:05:02 host sshd[1310]: Failed password for invalid user oracle from 198.51.100.77 port 50211 ssh2
     Oct 20 08:14:02 host sshd[1422]: Accepted publickey for sysadmin from 10.20.1.5 port 53210 ssh2
 
-Syslog timestamps carry no year, so the caller supplies one. A December -> January
-rollover inside a single file is handled automatically.
+    2026-10-20T08:14:02.123456+03:00 host sshd[1422]: Accepted publickey for sysadmin from 10.20.1.5 port 53210 ssh2
+
+The first shape is classic syslog (Debian, Ubuntu before 22.04, RHEL /var/log/secure,
+``journalctl`` default output). The second is the ISO 8601 shape written by rsyslog's
+high-precision format, the default on Ubuntu 22.04 and later and on Debian 12.
+
+Classic syslog timestamps carry no year, so the caller supplies one. A December -> January
+rollover inside a single file is handled automatically. ISO timestamps carry their own
+date; the wall-clock time in the line is used and any UTC offset is ignored, so every event
+in one file stays comparable.
+
+Lines that do not match (other daemons, truncated lines, lines over 4096 characters, bad
+addresses, impossible dates) are counted in ``ignored_lines`` and never raise.
 """
 
 from __future__ import annotations
@@ -23,6 +34,10 @@ from .models import Event
 _LINE_RE = re.compile(
     r"^(?P<month>[A-Z][a-z]{2})\s+(?P<day>\d{1,2})\s+(?P<time>\d{2}:\d{2}:\d{2})\s+"
     r"(?P<host>\S+)\s+sshd(?:\[\d+\])?:\s+(?P<msg>.*)$"
+)
+_ISO_LINE_RE = re.compile(
+    r"^(?P<date>\d{4}-\d{2}-\d{2})[T ](?P<time>\d{2}:\d{2}:\d{2})(?:[.,]\d+)?"
+    r"(?:Z|[+-]\d{2}:?\d{2})?\s+(?P<host>\S+)\s+sshd(?:\[\d+\])?:\s+(?P<msg>.*)$"
 )
 _FAILED_RE = re.compile(
     r"^Failed (?P<method>[\w-]+) for (?P<invalid>invalid user )?(?P<user>\S+) "
@@ -40,6 +55,7 @@ _MONTHS = {
     )
 }
 _MAX_USER_LEN = 64
+MAX_LINE_LENGTH = 4096
 
 
 @dataclass
@@ -78,7 +94,12 @@ def parse_log(lines: Iterable[str], year: Optional[int] = None) -> ParseResult:
             continue
         result.total_lines += 1
 
-        match = _LINE_RE.match(line)
+        if len(line) > MAX_LINE_LENGTH:
+            result.ignored_lines += 1
+            continue
+
+        iso = _ISO_LINE_RE.match(line)
+        match = iso or _LINE_RE.match(line)
         if not match:
             result.ignored_lines += 1
             continue
@@ -90,20 +111,23 @@ def parse_log(lines: Iterable[str], year: Optional[int] = None) -> ParseResult:
             result.ignored_lines += 1
             continue
 
-        month = _MONTHS.get(match.group("month"))
-        if month is None:
-            result.ignored_lines += 1
-            continue
-
-        if previous_month == 12 and month == 1:
-            current_year += 1
-        previous_month = month
-
         try:
-            timestamp = datetime.strptime(
-                f"{current_year} {month} {match.group('day')} {match.group('time')}",
-                "%Y %m %d %H:%M:%S",
-            )
+            if iso:
+                timestamp = datetime.strptime(
+                    f"{match.group('date')} {match.group('time')}", "%Y-%m-%d %H:%M:%S"
+                )
+            else:
+                month = _MONTHS.get(match.group("month"))
+                if month is None:
+                    result.ignored_lines += 1
+                    continue
+                if previous_month == 12 and month == 1:
+                    current_year += 1
+                previous_month = month
+                timestamp = datetime.strptime(
+                    f"{current_year} {month} {match.group('day')} {match.group('time')}",
+                    "%Y %m %d %H:%M:%S",
+                )
         except ValueError:
             result.ignored_lines += 1
             continue

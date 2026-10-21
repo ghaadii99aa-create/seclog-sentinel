@@ -8,6 +8,10 @@ from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
 SEVERITY_ORDER: Dict[str, int] = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 
+# SecLog Sentinel reads log lines. It can show indicators, never prove an attack.
+ASSESS_INDICATOR = "Suspicious indicator"
+ASSESS_LIKELY = "Likely compromise, investigate now"
+
 
 @dataclass(frozen=True)
 class Event:
@@ -38,6 +42,8 @@ class Finding:
     mitre_name: str
     description: str
     recommendation: str
+    reason: str = ""
+    assessment: str = ASSESS_INDICATOR
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Finding":
@@ -54,6 +60,8 @@ class Finding:
             mitre_name=data["mitre"]["name"],
             description=data["description"],
             recommendation=data["recommendation"],
+            reason=data.get("reason", ""),
+            assessment=data.get("assessment", ASSESS_INDICATOR),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -69,6 +77,8 @@ class Finding:
             "mitre": {"id": self.mitre_id, "name": self.mitre_name},
             "description": self.description,
             "recommendation": self.recommendation,
+            "reason": self.reason,
+            "assessment": self.assessment,
         }
 
 
@@ -110,6 +120,8 @@ class Analysis:
     hourly: List[Dict[str, int]] = field(default_factory=list)
     findings: List[Finding] = field(default_factory=list)
     ignored_lines: int = 0
+    flagged_events: List[Dict[str, Any]] = field(default_factory=list)
+    flagged_total: int = 0
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Analysis":
@@ -127,6 +139,8 @@ class Analysis:
             hourly=list(data.get("hourly", [])),
             findings=[Finding.from_dict(f) for f in data.get("findings", [])],
             ignored_lines=summary.get("ignored_lines", 0),
+            flagged_events=list(data.get("events", [])),
+            flagged_total=summary.get("suspicious_events", len(data.get("events", []))),
         )
 
     def severity_counts(self) -> Dict[str, int]:
@@ -146,9 +160,11 @@ class Analysis:
                 "start": self.start.isoformat() if self.start else None,
                 "end": self.end.isoformat() if self.end else None,
                 "ignored_lines": self.ignored_lines,
+                "suspicious_events": self.flagged_total,
                 "findings_by_severity": self.severity_counts(),
             },
             "top_sources": self.top_sources,
             "hourly": self.hourly,
             "findings": [f.to_dict() for f in self.findings],
+            "events": self.flagged_events,
         }

@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 from typing import Dict, List, Sequence, Tuple
 
-from .models import SEVERITY_ORDER, Event, Finding, Thresholds
+from .models import ASSESS_INDICATOR, ASSESS_LIKELY, SEVERITY_ORDER, Event, Finding, Thresholds
 
 MITRE_PASSWORD_GUESSING = ("T1110.001", "Password Guessing")
 MITRE_PASSWORD_SPRAYING = ("T1110.003", "Password Spraying")
@@ -35,6 +35,11 @@ def _max_window(events: Sequence[Event], window: timedelta) -> Tuple[int, int, i
         if count > best[0]:
             best = (count, left, right)
     return best
+
+
+def _minutes(delta: timedelta) -> str:
+    minutes = delta.total_seconds() / 60
+    return f"{minutes:g} minute{'s' if minutes != 1 else ''}"
 
 
 def _is_internal(ip: str, networks: Sequence[ipaddress._BaseNetwork]) -> bool:
@@ -82,6 +87,14 @@ def detect_brute_force(events: Sequence[Event], t: Thresholds) -> List[Finding]:
                     "Block or rate-limit the source IP (fail2ban or firewall), prefer "
                     "key-based authentication, and confirm the account was not accessed."
                 ),
+                reason=(
+                    f"Flagged because {count} failed logins from one IP against one account fell "
+                    f"inside a window of {_minutes(t.brute_force_window)}. The threshold is "
+                    f"{t.brute_force_failures}."
+                    + (" Severity is raised because the account is privileged." if privileged else "")
+                    + (" Severity is raised because the count reached 20." if count >= 20 and not privileged else "")
+                ),
+                assessment=ASSESS_INDICATOR,
             )
         )
     return findings
@@ -145,6 +158,12 @@ def detect_password_spraying(events: Sequence[Event], t: Thresholds) -> List[Fin
                     "Block the source, enforce MFA and account lockout, and verify none of "
                     "the targeted accounts logged in successfully from this IP."
                 ),
+                reason=(
+                    f"Flagged because one IP failed to log in to {distinct} different accounts inside a "
+                    f"window of {_minutes(t.spray_window)}. The threshold is {t.spray_users}."
+                    + (" Critical because the same IP later logged in successfully." if followed_by_login else "")
+                ),
+                assessment=ASSESS_LIKELY if followed_by_login else ASSESS_INDICATOR,
             )
         )
     return findings
@@ -186,9 +205,16 @@ def detect_success_after_failures(events: Sequence[Event], t: Thresholds) -> Lis
                     f"by a successful {event.method} login at {_fmt(event.timestamp)}."
                 ),
                 recommendation=(
-                    "Treat the account as compromised: force a password reset, terminate "
+                    "Treat the account as possibly compromised: force a password reset, terminate "
                     "active sessions, review activity after the login, and block the IP."
                 ),
+                reason=(
+                    f"Flagged because a successful login followed {count} failed logins for the same "
+                    f"account and IP within {_minutes(t.compromise_window)}. The threshold is "
+                    f"{t.compromise_failures}. This pattern is typical of a guessed password, but a "
+                    "user who mistyped their password looks the same, so verify with the account owner."
+                ),
+                assessment=ASSESS_LIKELY,
             )
         )
     return findings
@@ -230,6 +256,12 @@ def detect_privileged_external_login(events: Sequence[Event], t: Thresholds) -> 
                     "Confirm the login was expected. Restrict privileged SSH access to a VPN "
                     "or bastion host and disable direct root/admin logins."
                 ),
+                reason=(
+                    f"Flagged because '{user}' is on the privileged account list and the source "
+                    f"address {ip} is outside the configured internal networks. A legitimate "
+                    "administrator working remotely looks the same, so confirm it was expected."
+                ),
+                assessment=ASSESS_INDICATOR,
             )
         )
     return findings
