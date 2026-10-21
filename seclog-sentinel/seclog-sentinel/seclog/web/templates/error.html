@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block title %}{{ status }} - SecLog Sentinel{% endblock %}
+
+{% block main %}
+<section class="page-head">
+  <h1>{{ message }}</h1>
+  <p class="actions"><a class="btn" href="{{ url_for('index') }}">Back to the upload page</a></p>
+</section>
+{% endblock %}

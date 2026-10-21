@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block main %}
+<section class="hero">
+  <div class="hero-copy">
+    <h1>Find out who has been guessing your server's passwords.</h1>
+    <p class="lede">
+      Upload an SSH log from a Linux server. In a few seconds you get the brute-force attacks,
+      password spraying and accounts that may have been taken over, each with what to do next.
+    </p>
+  </div>
+
+  <div class="intake">
+    {% if error %}
+      <p class="form-error" role="alert">{{ error }}</p>
+    {% endif %}
+
+    <form id="upload-form" method="post" action="{{ url_for('analyze_upload') }}" enctype="multipart/form-data">
+      <label class="drop" for="logfile">
+        <span class="drop-title">Drop an auth log here</span>
+        <span class="drop-hint" id="drop-hint">or click to choose a file. Up to 5 MB.</span>
+        <input class="sr-only" type="file" id="logfile" name="file" required>
+      </label>
+
+      <details class="settings"{% if form and (form.get('privileged') or form.get('internal_networks') or form.get('year')) %} open{% endif %}>
+        <summary>Detection settings</summary>
+        <div class="settings-grid">
+          <label>Year of the log
+            <input type="number" name="year" min="1970" max="2100" inputmode="numeric" placeholder="Current year" value="{{ form.get('year', '') }}">
+          </label>
+          <label>Failed logins that count as brute force
+            <input type="number" name="brute_force_threshold" min="2" inputmode="numeric" placeholder="5" value="{{ form.get('brute_force_threshold', '') }}">
+          </label>
+          <label>Accounts tried that count as spraying
+            <input type="number" name="spray_users" min="2" inputmode="numeric" placeholder="5" value="{{ form.get('spray_users', '') }}">
+          </label>
+          <label>Extra admin accounts
+            <input type="text" name="privileged" placeholder="dba, ops" value="{{ form.get('privileged', '') }}">
+          </label>
+          <label class="wide">Extra internal networks
+            <input type="text" name="internal_networks" placeholder="100.64.0.0/10, 203.0.113.0/24" value="{{ form.get('internal_networks', '') }}">
+          </label>
+        </div>
+      </details>
+
+      <button class="btn" type="submit" id="analyze-btn">Analyze log</button>
+    </form>
+
+    <form method="post" action="{{ url_for('analyze_sample') }}" class="sample-form">
+      <button class="btn-quiet" type="submit">Or try the sample log</button>
+    </form>
+  </div>
+</section>
+
+<section class="evidence-section" aria-labelledby="evidence-title">
+  <h2 id="evidence-title">What an attack looks like in a log</h2>
+  <p class="section-note">These lines come from the sample log. Each group is a different detection.</p>
+
+  <figure class="evidence">
+    <div class="group sev-critical">
+      <pre tabindex="0" aria-label="Log excerpt"><code><span class="ln">Oct 20 02:41:11 srv-app-01 sshd[29332]: Failed password for root from 203.0.113.45 port 44008 ssh2</span>
+<span class="ln">Oct 20 02:41:15 srv-app-01 sshd[6394]: Failed password for root from 203.0.113.45 port 33842 ssh2</span>
+<span class="ln">Oct 20 02:41:19 srv-app-01 sshd[13793]: Failed password for root from 203.0.113.45 port 30141 ssh2</span>
+<span class="gap">... 32 more attempts ...</span>
+<span class="ln">Oct 20 02:43:39 srv-app-01 sshd[30666]: Failed password for root from 203.0.113.45 port 46457 ssh2</span></code></pre>
+      <p class="verdict-line"><strong>Brute force.</strong> 38 failed logins for root from one address in 148 seconds.</p>
+    </div>
+
+    <div class="group sev-high">
+      <pre tabindex="0" aria-label="Log excerpt"><code><span class="ln">Oct 20 04:05:00 srv-app-01 sshd[4024]: Failed password for invalid user admin from 198.51.100.77 port 33329 ssh2</span>
+<span class="ln">Oct 20 04:05:38 srv-app-01 sshd[28176]: Failed password for invalid user test from 198.51.100.77 port 57759 ssh2</span>
+<span class="ln">Oct 20 04:06:16 srv-app-01 sshd[2444]: Failed password for invalid user oracle from 198.51.100.77 port 48132 ssh2</span></code></pre>
+      <p class="verdict-line"><strong>Password spraying.</strong> 14 different accounts tried from one address in 8 minutes.</p>
+    </div>
+
+    <div class="group sev-critical">
+      <pre tabindex="0" aria-label="Log excerpt"><code><span class="ln">Oct 20 22:14:36 srv-app-01 sshd[21337]: Failed password for dr.fahad from 192.0.2.88 port 56632 ssh2</span>
+<span class="ln">Oct 20 22:14:52 srv-app-01 sshd[31335]: Accepted password for dr.fahad from 192.0.2.88 port 40128 ssh2</span></code></pre>
+      <p class="verdict-line"><strong>Likely account takeover.</strong> The login succeeded right after 7 failures from the same address.</p>
+    </div>
+  </figure>
+</section>
+
+<section class="checks" aria-labelledby="checks-title">
+  <h2 id="checks-title">What it checks</h2>
+  <dl class="check-list">
+    <div>
+      <dt>Brute force</dt>
+      <dd>Many failed logins from one address against one account within a few minutes.
+        <a href="https://attack.mitre.org/techniques/T1110/001/" rel="noopener noreferrer">T1110.001</a></dd>
+    </div>
+    <div>
+      <dt>Password spraying</dt>
+      <dd>One address trying many different accounts, hoping one has a weak password. Critical if that address later logs in.
+        <a href="https://attack.mitre.org/techniques/T1110/003/" rel="noopener noreferrer">T1110.003</a></dd>
+    </div>
+    <div>
+      <dt>Likely account takeover</dt>
+      <dd>A login succeeds right after repeated failures for the same account and address.
+        <a href="https://attack.mitre.org/techniques/T1078/" rel="noopener noreferrer">T1078</a></dd>
+    </div>
+    <div>
+      <dt>Admin login from outside</dt>
+      <dd>root, admin or another privileged account signing in from outside your internal network.
+        <a href="https://attack.mitre.org/techniques/T1078/" rel="noopener noreferrer">T1078</a></dd>
+    </div>
+  </dl>
+</section>
+{% endblock %}

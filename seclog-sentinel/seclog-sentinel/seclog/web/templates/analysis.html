@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}{{ verdict.headline }} - SecLog Sentinel{% endblock %}
+
+{% block main %}
+<section class="verdict">
+  <p class="filename">{{ row.filename }}</p>
+  <h1>{{ verdict.headline }}</h1>
+  <p class="lede">{{ verdict.detail }}</p>
+  <p class="actions">
+    <a class="btn" href="{{ url_for('download_html', analysis_id=row.id) }}">Download report</a>
+    <a class="btn-quiet" href="{{ url_for('download_json', analysis_id=row.id) }}">Download JSON</a>
+    <a class="btn-quiet" href="{{ url_for('index') }}">Analyze another log</a>
+  </p>
+</section>
+
+<section aria-labelledby="findings-title">
+  <h2 id="findings-title">Findings</h2>
+  {% if data.findings %}
+  <ol class="findings">
+    {% for f in data.findings %}
+    <li class="finding sev-{{ f.severity }}">
+      <details{% if loop.first %} open{% endif %}>
+        <summary>
+          <span class="sev">{{ f.severity|capitalize }}</span>
+          <span class="ftitle">{{ f.title }}</span>
+          <span class="fwhen">{{ f.first_seen|dt }}</span>
+        </summary>
+        <div class="fbody">
+          <p>{{ f.description }}</p>
+          <dl class="facts">
+            <div><dt>Source address</dt><dd class="addr">{{ f.ip }}</dd></div>
+            <div><dt>Accounts</dt><dd>{{ f.users[:8]|join(', ') }}{% if f.users|length > 8 %} and {{ f.users|length - 8 }} more{% endif %}</dd></div>
+            <div><dt>Events</dt><dd>{{ f.count }}</dd></div>
+            <div><dt>MITRE ATT&amp;CK</dt><dd><a href="https://attack.mitre.org/techniques/{{ f.mitre.id|replace('.', '/') }}/" rel="noopener noreferrer">{{ f.mitre.id }} {{ f.mitre.name }}</a></dd></div>
+          </dl>
+          <p class="todo"><strong>What to do:</strong> {{ f.recommendation }}</p>
+        </div>
+      </details>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="empty">Nothing in this log matched a detection with the current settings. If you expected a finding, lower the thresholds under Detection settings and analyze again.</p>
+  {% endif %}
+</section>
+
+{% if blocklist %}
+<section aria-labelledby="block-title">
+  <h2 id="block-title">Addresses to block</h2>
+  <p class="section-note">External addresses behind brute force, spraying or a likely takeover. Check each one before you add it to a firewall.</p>
+  <div class="blocklist">
+    <textarea id="blocklist" readonly rows="{{ [blocklist|length, 6]|min }}" aria-label="Addresses to block">{{ blocklist|join('\n') }}</textarea>
+    <button class="btn-quiet" type="button" id="copy-blocklist" hidden>Copy addresses</button>
+  </div>
+</section>
+{% endif %}
+
+<section aria-labelledby="hours-title">
+  <h2 id="hours-title">Logins by hour of day</h2>
+  <svg class="chart" viewBox="0 0 720 176" role="img" aria-labelledby="chart-desc">
+    <desc id="chart-desc">Bar chart of failed and accepted logins for each hour of the day. The busiest hour had {{ chart.peak }} events.</desc>
+    <line class="axis" x1="0" y1="{{ chart.baseline }}" x2="720" y2="{{ chart.baseline }}"/>
+    {% for b in chart.bars %}
+    <g>
+      <title>{{ b.tip }}</title>
+      {% if b.failed_h %}<rect class="bar-fail" x="{{ b.x }}" y="{{ b.failed_y }}" width="20" height="{{ b.failed_h }}"/>{% endif %}
+      {% if b.accepted_h %}<rect class="bar-ok" x="{{ b.x }}" y="{{ b.accepted_y }}" width="20" height="{{ b.accepted_h }}"/>{% endif %}
+      {% if b.show_label %}<text class="tick" x="{{ b.x + 10 }}" y="168" text-anchor="middle">{{ b.label }}</text>{% endif %}
+    </g>
+    {% endfor %}
+  </svg>
+  <p class="key"><span class="swatch swatch-fail"></span>Failed <span class="swatch swatch-ok"></span>Accepted</p>
+</section>
+
+<section aria-labelledby="sources-title">
+  <h2 id="sources-title">Where failed logins came from</h2>
+  {% if data.top_sources %}
+  <table class="sources">
+    <thead><tr><th scope="col">Source address</th><th scope="col" class="num">Failed logins</th><th scope="col" class="num">Accounts tried</th></tr></thead>
+    <tbody>
+      {% for s in data.top_sources %}
+      <tr><td class="addr">{{ s.ip }}</td><td class="num">{{ s.failures }}</td><td class="num">{{ s.distinct_users }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">There were no failed logins in this log.</p>
+  {% endif %}
+</section>
+
+<section class="meta-block" aria-labelledby="meta-title">
+  <h2 id="meta-title">About this analysis</h2>
+  <dl class="facts">
+    <div><dt>Brute force</dt><dd>{{ data.settings.brute_force_failures }} failures within {{ data.settings.brute_force_window_minutes }} minutes</dd></div>
+    <div><dt>Spraying</dt><dd>{{ data.settings.spray_users }} accounts within {{ data.settings.spray_window_minutes }} minutes</dd></div>
+    <div><dt>Log year</dt><dd>{{ data.settings.year }}</dd></div>
+    <div><dt>Lines ignored</dt><dd>{{ data.summary.ignored_lines }} that were not SSH logins</dd></div>
+    {% if ephemeral %}
+    <div><dt>Kept</dt><dd>Until the demo server restarts. Download the report to keep a copy.</dd></div>
+    {% else %}
+    <div><dt>Kept until</dt><dd>{{ expires|dt }}</dd></div>
+    {% endif %}
+  </dl>
+  <p class="share-note">Anyone with this page's link can view these results.</p>
+  {% if is_owner %}
+  <form method="post" action="{{ url_for('delete_analysis', analysis_id=row.id) }}">
+    <button class="btn-danger" type="submit">Delete this analysis</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

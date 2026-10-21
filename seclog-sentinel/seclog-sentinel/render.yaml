@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: seclog-sentinel
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --access-logfile -
+    healthCheckPath: /healthz
+    envVars:
+      - key: SECLOG_TRUST_PROXY
+        value: "1"
+      # The free plan erases local files when the server idles, so the app words its notices accordingly.
+      - key: SECLOG_EPHEMERAL
+        value: "1"
+      - key: SECLOG_DB
+        value: /tmp/seclog.db
+      # Optional: shows a "View the source code" link in the footer. Replace YOUR-USERNAME.
+      - key: SECLOG_REPO_URL
+        value: https://github.com/YOUR-USERNAME/seclog-sentinel

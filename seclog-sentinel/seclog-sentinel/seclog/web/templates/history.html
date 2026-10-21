@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Your analyses - SecLog Sentinel{% endblock %}
+
+{% block main %}
+<section class="page-head">
+  <h1>Your analyses</h1>
+  <p class="lede">Results from this browser.
+    {% if ephemeral %}They disappear when the demo server restarts.{% else %}They are deleted after {{ retention_days }} days.{% endif %}</p>
+</section>
+
+{% if items %}
+<table class="history">
+  <thead>
+    <tr><th scope="col">Log</th><th scope="col">Analyzed</th><th scope="col">Result</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
+  </thead>
+  <tbody>
+    {% for item in items %}
+    <tr>
+      <td><a href="{{ url_for('view_analysis', analysis_id=item.row.id) }}">{{ item.row.filename }}</a></td>
+      <td>{{ item.row.created_at|when }}</td>
+      <td>
+        {% if item.worst %}
+          <span class="sev sev-text-{{ item.worst }}">{{ item.total }} finding{{ 's' if item.total != 1 }}, worst is {{ item.worst }}</span>
+        {% else %}
+          No findings
+        {% endif %}
+      </td>
+      <td class="row-actions">
+        <form method="post" action="{{ url_for('delete_analysis', analysis_id=item.row.id) }}">
+          <button class="btn-link" type="submit" aria-label="Delete analysis of {{ item.row.filename }}">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">You have not analyzed a log in this browser yet. <a href="{{ url_for('index') }}">Upload a log</a> or try the sample.</p>
+<form method="post" action="{{ url_for('analyze_sample') }}"><button class="btn" type="submit">Analyze the sample log</button></form>
+{% endif %}
+{% endblock %}
