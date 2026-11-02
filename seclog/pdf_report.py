@@ -315,7 +315,7 @@ class _Report:
         counts = a.severity_counts()
         failed_pct = f"{a.failed / a.total_events:.0%}" if a.total_events else "n/a"
         headline = (
-            "The log shows signs of a break-in." if counts["critical"]
+            "Potential suspicious activity detected." if counts["critical"]
             else "The log shows active attacks." if counts["high"]
             else "The log shows suspicious activity." if sum(counts.values())
             else "No attacks were found in this log."
