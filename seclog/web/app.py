@@ -186,7 +186,7 @@ def build_verdict(data: Dict[str, Any]) -> Dict[str, str]:
     counts = summary["findings_by_severity"]
     total = sum(counts.values())
     if counts["critical"]:
-        headline = "This log shows signs of a break-in."
+        headline = "Potential suspicious activity detected."
     elif counts["high"]:
         headline = "This log shows active attacks on your server."
     elif total:

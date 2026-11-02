@@ -112,7 +112,7 @@ class AnalysisFlowTests(WebTestCase):
         self.assertEqual(response.status_code, 303)
         page = self.client.get(response.headers["Location"])
         self.assertEqual(page.status_code, 200)
-        self.assertIn(b"signs of a break-in", page.data)
+        self.assertIn(b"Potential suspicious activity detected", page.data)
         self.assertIn(b"Possible account compromise", page.data)
         self.assertIn(b"203.0.113.45", page.data)  # attacker shown in block list
 
