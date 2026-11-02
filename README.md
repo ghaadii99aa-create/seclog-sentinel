@@ -1,7 +1,7 @@
 # SecLog Sentinel
 
 [![CI](https://github.com/ghaadii99aa-create/seclog-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/ghaadii99aa-create/seclog-sentinel/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 **Live demo: [seclog-sentinel.onrender.com](https://seclog-sentinel.onrender.com)** (try the sample log, no sign-up).
@@ -81,7 +81,7 @@ dependency, so the same code serves the CLI, the API and the dashboard.
 
 | Technology | Used for | Why this choice |
 |---|---|---|
-| **Python 3.9+** | Parser, detection rules, CLI | The core uses only the standard library, so the CLI installs nowhere and runs anywhere |
+| **Python 3.10+** | Parser, detection rules, CLI | The core uses only the standard library, so the CLI installs nowhere and runs anywhere |
 | **Flask 3** | Web pages and REST API | Small, explicit and easy to read. Server-rendered Jinja templates escape output by default |
 | **SQLite** | Storing results for the share link and history | No server to run; fine for one instance. The limits are documented below |
 | **gunicorn** | Production WSGI server | Standard for Flask; used on Render and in the Docker image |
@@ -90,7 +90,7 @@ dependency, so the same code serves the CLI, the API and the dashboard.
 | **unittest** | Tests | Standard library, no extra dependencies |
 | **ruff** | Linting | Fast, one config in `pyproject.toml` |
 | **Docker** | Container image | Non-root user, health check, volume for results |
-| **GitHub Actions** | CI | Lint, tests on Python 3.9 to 3.13, and a build and smoke test of the Docker image |
+| **GitHub Actions** | CI | Lint, tests on Python 3.10 to 3.13, and a build and smoke test of the Docker image |
 | **Render** | Hosting the live demo | Free web service, blueprint in `render.yaml` |
 | **MITRE ATT&CK** | Naming each technique | Lets findings feed existing SOC workflows |
 
@@ -184,7 +184,7 @@ ruff check .
 
 Without Flask installed the 66 web tests are skipped and the other 58 pass (checked on Python 3.11
 and 3.12). `ruff check .` reports no problems. GitHub Actions runs lint, the test suite on Python
-3.9 to 3.13 and a Docker build with a smoke test on every push to `main` and every pull request.
+3.10 to 3.13 and a Docker build with a smoke test on every push to `main` and every pull request.
 
 What the tests cover: log parsing (both timestamp formats, malformed, truncated, oversized and
 hostile lines), every rule including the cases that must *not* alert, severity classification,
