@@ -18,10 +18,13 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .. import __version__
-from ..analyzer import analyze
+from ..analyzer import analyze, events_for_finding
 from ..models import Analysis, Thresholds
 from ..parser import parse_log
+from ..pdf_report import AVAILABLE as PDF_AVAILABLE
+from ..pdf_report import PdfUnavailable, render_pdf
 from ..report import render_events_csv, render_findings_csv, render_html, render_json
+from .apidocs import API_SECTIONS, ERROR_EXAMPLES
 from .storage import RETENTION_DAYS, Store
 
 log = logging.getLogger("seclog")
@@ -244,6 +247,64 @@ def build_chart(hourly: List[Dict[str, int]]) -> Dict[str, Any]:
     return {"bars": bars, "peak": peak, "baseline": baseline}
 
 
+def build_donut(failed: int, accepted: int) -> Dict[str, Any]:
+    """Failed vs accepted share for the donut chart (circumference is normalised to 100)."""
+    total = failed + accepted
+    failed_pct = round(failed / total * 100, 2) if total else 0
+    return {
+        "total": total,
+        "failed": failed,
+        "accepted": accepted,
+        "failed_pct": failed_pct,
+        "accepted_pct": round(100 - failed_pct, 2) if total else 0,
+        "failed_label": f"{failed / total:.0%}" if total else "0%",
+    }
+
+
+def build_distribution(types: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    total = sum(t["count"] for t in types) or 1
+    return [{**t, "share": round(t["count"] / total * 100, 1), "width": round(t["count"] / total * 100, 1)} for t in types]
+
+
+def build_source_bars(sources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    peak = max((s["failures"] for s in sources), default=0) or 1
+    return [{**s, "width": round(s["failures"] / peak * 100, 1)} for s in sources]
+
+
+def build_timeline_chart(timeline: List[Dict[str, Any]], series: List[str]) -> Dict[str, Any]:
+    """Stacked columns for a time series (SVG attributes only, because the CSP blocks inline styles)."""
+    plot_height, baseline, width = 120, 140, 720
+    if not timeline:
+        return {"bars": [], "peak": 0, "baseline": baseline, "width": width}
+    peak = max(sum(b[k] for k in series) for b in timeline) or 1
+    slot = width / len(timeline)
+    bar = min(max(slot * 0.68, 3), 26)
+    hours = timeline[0]["hours"]
+    every = max(1, round(len(timeline) / 12))
+    bars = []
+    for i, b in enumerate(timeline):
+        moment = datetime.fromisoformat(b["start"])
+        x = round(i * slot + (slot - bar) / 2, 1)
+        segments, top = [], baseline
+        for key in series:
+            h = round(b[key] / peak * plot_height, 1)
+            top = round(top - h, 1)
+            segments.append({"key": key, "y": top, "h": h})
+        stamp = moment.strftime("%d %b %H:%M") if hours < 24 else moment.strftime("%d %b")
+        bars.append(
+            {
+                "x": x,
+                "w": round(bar, 1),
+                "cx": round(x + bar / 2, 1),
+                "segments": segments,
+                "label": moment.strftime("%H") if hours < 24 else moment.strftime("%d/%m"),
+                "show_label": i % every == 0,
+                "tip": f"{stamp}: " + ", ".join(f"{b[k]} {k}" for k in series),
+            }
+        )
+    return {"bars": bars, "peak": peak, "baseline": baseline, "width": width, "hours": hours}
+
+
 def build_severity_bars(counts: Dict[str, int]) -> List[Dict[str, Any]]:
     """Rows for the severity distribution chart (SVG widths are percentages)."""
     peak = max(counts.values(), default=0) or 1
@@ -416,15 +477,18 @@ def create_app(
                 "days, or the link may be mistyped."
             ),
             405: "That action is not allowed here.",
+            410: "This analysis is no longer available.",
             413: f"That file is larger than {max_upload_bytes // (1024 * 1024) or 1} MB. "
                  "Upload a smaller log, or split it by day.",
             429: "You have run several analyses in a short time. Wait a few minutes and try again.",
+            503: "This feature is not available on this server right now.",
         }
         code = error.code or 500
         message = messages.get(code, error.description or "Something went wrong.")
+        headers = {"Retry-After": str(rate_limit[1])} if code == 429 else {}
         if wants_json():
-            return jsonify(error=message), code
-        return render_template("error.html", status=code, message=message), code
+            return jsonify(error=message), code, headers
+        return render_template("error.html", status=code, message=message), code, headers
 
     @app.errorhandler(Exception)
     def handle_unexpected_error(error: Exception):
@@ -503,6 +567,12 @@ def create_app(
         findings = filter_findings(data["findings"], filters)
         events_all = filter_events(data.get("events", []), filters)
         events = list(reversed(events_all))[:MAX_TABLE_ROWS]  # newest first
+        all_events = data.get("events", [])
+        for item in findings:
+            matched = events_for_finding(item, all_events)
+            item["evidence"] = matched[:5]
+            item["evidence_more"] = max(len(matched) - 5, 0)
+        timeline_items = sorted(data["findings"], key=lambda f: f["first_seen"])
         expires = datetime.fromtimestamp(row["created_at"]) + timedelta(days=RETENTION_DAYS)
         return render_template(
             "analysis.html",
@@ -512,7 +582,15 @@ def create_app(
             blocklist=build_blocklist(data),
             chart=build_chart(data["hourly"]),
             severity_bars=build_severity_bars(data["summary"]["findings_by_severity"]),
-            recent=list(reversed(data.get("events", [])))[:6],
+            recent=list(reversed(all_events))[:6],
+            donut=build_donut(data["summary"]["failed"], data["summary"]["accepted"]),
+            distribution=build_distribution(data.get("event_types", [])),
+            source_bars=build_source_bars(data["top_sources"]),
+            activity_chart=build_timeline_chart(data.get("timeline", []), ["accepted", "failed"]),
+            suspicious_chart=build_timeline_chart(data.get("timeline", []), ["suspicious"]),
+            finding_timeline=timeline_items,
+            analyzed_at=datetime.fromtimestamp(row["created_at"]),
+            pdf_available=PDF_AVAILABLE,
             filters=filters,
             filtered=any(v not in ("", None) for v in filters.values()),
             findings=findings,
@@ -542,6 +620,21 @@ def create_app(
         response.headers["Content-Disposition"] = f'attachment; filename="seclog-report-{analysis_id}.json"'
         return response
 
+    @app.get("/a/<analysis_id>/report.pdf")
+    def download_pdf(analysis_id: str):
+        row = store.get(analysis_id) or abort(404)
+        try:
+            pdf = render_pdf(
+                Analysis.from_dict(row["data"]), source_name=row["filename"],
+                generated_at=datetime.fromtimestamp(row["created_at"]),
+            )
+        except PdfUnavailable:
+            abort(503)
+        response = make_response(pdf)
+        response.headers["Content-Type"] = "application/pdf"
+        response.headers["Content-Disposition"] = f'attachment; filename="seclog-report-{analysis_id}.pdf"'
+        return response
+
     @app.get("/a/<analysis_id>/report.csv")
     def download_csv(analysis_id: str):
         row = store.get(analysis_id) or abort(404)
@@ -557,6 +650,10 @@ def create_app(
         if not store.delete(analysis_id, g.sid):
             abort(404)
         return redirect(url_for("history"), code=303)
+
+    @app.get("/docs")
+    def api_docs():
+        return render_template("docs.html", sections=API_SECTIONS, error_examples=ERROR_EXAMPLES)
 
     @app.get("/history")
     def history():

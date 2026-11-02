@@ -72,3 +72,9 @@ Python process works. These are descriptions of how it would map, **not** deploy
 Results live in a single SQLite file and the rate limiter is in process memory. That is right for a
 demo and a single instance. Running several instances needs shared storage (PostgreSQL) and a shared
 rate limiter (Redis, or limits at the load balancer).
+
+
+## Dependencies
+
+`requirements.txt` now includes `reportlab` for PDF reports. It is pure Python wheels on Render, so the
+build command does not change. If it is missing, the PDF button is hidden and the other exports still work.

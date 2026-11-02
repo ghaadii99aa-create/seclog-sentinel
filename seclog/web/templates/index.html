@@ -1,25 +1,42 @@
 {% extends "base.html" %}
 
 {% block main %}
-<section class="hero">
+<section class="hero" aria-labelledby="hero-title">
   <div class="hero-copy">
-    <h1>Find out who has been guessing your server's passwords.</h1>
+    <p class="eyebrow">SecLog Sentinel</p>
+    <h1 id="hero-title">Cloud-Based Security Log Analysis Platform</h1>
     <p class="lede">
-      Upload an SSH log from a Linux server. In a few seconds you get the brute-force attacks,
-      password spraying and accounts that may have been taken over, each with what to do next.
+      Find out who has been guessing your server's passwords. Upload an SSH log and get brute-force attacks,
+      password spraying and likely account takeovers, each mapped to MITRE ATT&amp;CK with the evidence,
+      why it matters and what to do next.
     </p>
+    <ul class="trust" aria-label="Highlights">
+      <li>No sign-up, works in any browser</li>
+      <li>Raw log is never stored</li>
+      <li>PDF, CSV and JSON reports</li>
+    </ul>
+    <div class="cta-row">
+      <a class="btn btn-lg" href="#upload">Analyze a log</a>
+      <form method="post" action="{{ url_for('analyze_sample') }}" class="inline-form">
+        <button class="btn-ghost btn-lg" type="submit">Try the sample log</button>
+      </form>
+    </div>
   </div>
 
-  <div class="intake">
+  <div class="intake card" id="upload">
+    <h2 class="card-title">Analyze a log</h2>
+    <div class="feedback" aria-live="polite">
     {% if error %}
       <p class="form-error" role="alert">{{ error }}</p>
     {% endif %}
+    </div>
 
     <form id="upload-form" method="post" action="{{ url_for('analyze_upload') }}" enctype="multipart/form-data">
       <label class="drop" for="logfile">
+        <svg class="drop-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
         <span class="drop-title">Drop an auth log here</span>
-        <span class="drop-hint" id="drop-hint">or click to choose a file. Up to 5 MB.</span>
-        <input class="sr-only" type="file" id="logfile" name="file" required>
+        <span class="drop-hint" id="drop-hint">or click to choose a file. Plain text, up to 5 MB.</span>
+        <input class="sr-only" type="file" id="logfile" name="file" required aria-describedby="drop-hint">
       </label>
 
       <details class="settings"{% if form and (form.get('privileged') or form.get('internal_networks') or form.get('year')) %} open{% endif %}>
@@ -49,17 +66,36 @@
         </div>
       </details>
 
-      <button class="btn" type="submit" id="analyze-btn">Analyze log</button>
+      <button class="btn btn-block" type="submit" id="analyze-btn">Analyze log</button>
     </form>
+    <p class="fine">Use synthetic or non-sensitive logs. Results can be opened by anyone who has the link.</p>
+  </div>
+</section>
 
-    <form method="post" action="{{ url_for('analyze_sample') }}" class="sample-form">
-      <button class="btn-quiet" type="submit">Or try the sample log</button>
-    </form>
+<section class="steps-section" aria-labelledby="how-title">
+  <h2 id="how-title" class="section-title">How it works</h2>
+  <ol class="steps">
+    <li><span class="step-n" aria-hidden="true">1</span><h3>Upload</h3><p>Drop in an sshd log from Debian, Ubuntu, RHEL or any server that writes <code>auth.log</code> or <code>secure</code>. Both classic and ISO timestamps work.</p></li>
+    <li><span class="step-n" aria-hidden="true">2</span><h3>Analyze</h3><p>Four detection rules run over the events in memory. Thresholds and time windows are yours to change.</p></li>
+    <li><span class="step-n" aria-hidden="true">3</span><h3>Visualize</h3><p>A dashboard shows severity, failed versus successful logins, activity over time and the busiest source addresses.</p></li>
+    <li><span class="step-n" aria-hidden="true">4</span><h3>Report</h3><p>Download a branded PDF, a self-contained HTML report, CSV or JSON, or pull the same result from the REST API.</p></li>
+  </ol>
+</section>
+
+<section aria-labelledby="features-title">
+  <h2 id="features-title" class="section-title">What you get</h2>
+  <div class="features">
+    <article class="feature"><h3>Explainable findings</h3><p>Every finding shows its evidence, the rule and threshold that fired, why it matters and the defensive action to take. Nothing is called a confirmed attack.</p></article>
+    <article class="feature"><h3>Security analytics</h3><p>Severity distribution, event types, failed versus successful logins, activity over time and top source addresses, all drawn from your log.</p></article>
+    <article class="feature"><h3>Filter and search</h3><p>Narrow findings and events by severity, detection, hour or text. Click a chart to filter. Works without JavaScript.</p></article>
+    <article class="feature"><h3>Reports and API</h3><p>PDF with charts, HTML, CSV and JSON, plus a documented REST API for scripts and CI.</p></article>
+    <article class="feature"><h3>Private by design</h3><p>The raw log is analyzed in memory and discarded. Output is escaped and a strict Content Security Policy blocks injected scripts.</p></article>
+    <article class="feature"><h3>Built to be checked</h3><p>Open source, with automated tests, linting and a container build on every push. The security review lists what is and is not covered.</p></article>
   </div>
 </section>
 
 <section class="evidence-section" aria-labelledby="evidence-title">
-  <h2 id="evidence-title">What an attack looks like in a log</h2>
+  <h2 id="evidence-title" class="section-title">What an attack looks like in a log</h2>
   <p class="section-note">These lines come from the sample log. Each group is a different detection.</p>
 
   <figure class="evidence">
@@ -88,7 +124,7 @@
 </section>
 
 <section class="checks" aria-labelledby="checks-title">
-  <h2 id="checks-title">What it checks</h2>
+  <h2 id="checks-title" class="section-title">What it checks</h2>
   <dl class="check-list">
     <div>
       <dt>Brute force</dt>
@@ -111,5 +147,13 @@
         <a href="https://attack.mitre.org/techniques/T1078/" rel="noopener noreferrer">T1078</a></dd>
     </div>
   </dl>
+</section>
+
+<section class="cta-band" aria-labelledby="cta-title">
+  <div>
+    <h2 id="cta-title">See it on real data in ten seconds</h2>
+    <p>No sign-up. Try the sample log, or drop in your own.</p>
+  </div>
+  <form method="post" action="{{ url_for('analyze_sample') }}"><button class="btn btn-lg" type="submit">Analyze the sample log</button></form>
 </section>
 {% endblock %}

@@ -68,3 +68,10 @@ you are not allowed to share. The demo is meant for synthetic or personal-server
 ## Reporting a problem
 
 Open a GitHub issue. Do not paste real logs or credentials into it.
+
+
+## PDF reports
+
+The PDF is built in memory from the stored analysis (never from the raw log). Every user-controlled string
+(account names, file name) is escaped and restricted to characters ReportLab's built-in fonts can draw
+before it reaches the document. A test renders a PDF from hostile account names and from an empty analysis.

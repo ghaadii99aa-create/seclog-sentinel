@@ -3,7 +3,8 @@
 {% block title %}{{ status }} - SecLog Sentinel{% endblock %}
 
 {% block main %}
-<section class="page-head">
+<section class="page-head narrow">
+  <p class="eyebrow">Error {{ status }}</p>
   <h1>{{ message }}</h1>
   <p class="actions"><a class="btn" href="{{ url_for('index') }}">Back to the upload page</a></p>
 </section>

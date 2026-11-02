@@ -15,6 +15,23 @@ from typing import Dict, List, Sequence, Tuple
 
 from .models import ASSESS_INDICATOR, ASSESS_LIKELY, SEVERITY_ORDER, Event, Finding, Thresholds
 
+IMPACT_BRUTE_FORCE = (
+    "Repeated guesses against one account are how most SSH compromises start. If the password is weak, "
+    "reused or leaked in a breach, one guess can succeed, and the attacker then has the same access as that user."
+)
+IMPACT_SPRAYING = (
+    "Spraying tries a few common passwords against many accounts so that no single account trips a lockout. "
+    "It works if any one account has a weak password, so the risk grows with the number of accounts reachable over SSH."
+)
+IMPACT_TAKEOVER = (
+    "A success right after repeated failures is the pattern of a guessed password. If it is real, the attacker "
+    "already holds a valid account, which makes this the most urgent kind of finding."
+)
+IMPACT_PRIVILEGED = (
+    "Administrator accounts can change the whole system. A privileged login from outside the trusted network is "
+    "only safe if it was expected, because a stolen credential would give the attacker full control."
+)
+
 MITRE_PASSWORD_GUESSING = ("T1110.001", "Password Guessing")
 MITRE_PASSWORD_SPRAYING = ("T1110.003", "Password Spraying")
 MITRE_VALID_ACCOUNTS = ("T1078", "Valid Accounts")
@@ -95,6 +112,7 @@ def detect_brute_force(events: Sequence[Event], t: Thresholds) -> List[Finding]:
                     + (" Severity is raised because the count reached 20." if count >= 20 and not privileged else "")
                 ),
                 assessment=ASSESS_INDICATOR,
+                impact=IMPACT_BRUTE_FORCE,
             )
         )
     return findings
@@ -164,6 +182,7 @@ def detect_password_spraying(events: Sequence[Event], t: Thresholds) -> List[Fin
                     + (" Critical because the same IP later logged in successfully." if followed_by_login else "")
                 ),
                 assessment=ASSESS_LIKELY if followed_by_login else ASSESS_INDICATOR,
+                impact=IMPACT_SPRAYING,
             )
         )
     return findings
@@ -215,6 +234,7 @@ def detect_success_after_failures(events: Sequence[Event], t: Thresholds) -> Lis
                     "user who mistyped their password looks the same, so verify with the account owner."
                 ),
                 assessment=ASSESS_LIKELY,
+                impact=IMPACT_TAKEOVER,
             )
         )
     return findings
@@ -262,6 +282,7 @@ def detect_privileged_external_login(events: Sequence[Event], t: Thresholds) -> 
                     "administrator working remotely looks the same, so confirm it was expected."
                 ),
                 assessment=ASSESS_INDICATOR,
+                impact=IMPACT_PRIVILEGED,
             )
         )
     return findings

@@ -44,6 +44,7 @@ class Finding:
     recommendation: str
     reason: str = ""
     assessment: str = ASSESS_INDICATOR
+    impact: str = ""
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Finding":
@@ -62,6 +63,7 @@ class Finding:
             recommendation=data["recommendation"],
             reason=data.get("reason", ""),
             assessment=data.get("assessment", ASSESS_INDICATOR),
+            impact=data.get("impact", ""),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -79,6 +81,7 @@ class Finding:
             "recommendation": self.recommendation,
             "reason": self.reason,
             "assessment": self.assessment,
+            "impact": self.impact,
         }
 
 
@@ -122,6 +125,9 @@ class Analysis:
     ignored_lines: int = 0
     flagged_events: List[Dict[str, Any]] = field(default_factory=list)
     flagged_total: int = 0
+    event_types: List[Dict[str, Any]] = field(default_factory=list)
+    timeline: List[Dict[str, Any]] = field(default_factory=list)
+    suspicious_hourly: List[int] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Analysis":
@@ -141,6 +147,9 @@ class Analysis:
             ignored_lines=summary.get("ignored_lines", 0),
             flagged_events=list(data.get("events", [])),
             flagged_total=summary.get("suspicious_events", len(data.get("events", []))),
+            event_types=list(data.get("event_types", [])),
+            timeline=list(data.get("timeline", [])),
+            suspicious_hourly=list(data.get("suspicious_hourly", [])),
         )
 
     def severity_counts(self) -> Dict[str, int]:
@@ -167,4 +176,7 @@ class Analysis:
             "hourly": self.hourly,
             "findings": [f.to_dict() for f in self.findings],
             "events": self.flagged_events,
+            "event_types": self.event_types,
+            "timeline": self.timeline,
+            "suspicious_hourly": self.suspicious_hourly,
         }

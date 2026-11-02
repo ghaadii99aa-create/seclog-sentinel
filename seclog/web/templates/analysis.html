@@ -2,91 +2,160 @@
 
 {% block title %}{{ verdict.headline }} - SecLog Sentinel{% endblock %}
 
+{% macro column_chart(chart, classes, label) %}
+<svg class="chart" viewBox="0 0 {{ chart.width }} 170" role="img" aria-label="{{ label }}">
+  <line class="axis" x1="0" y1="{{ chart.baseline }}" x2="{{ chart.width }}" y2="{{ chart.baseline }}"/>
+  <text class="tick" x="0" y="14">{{ chart.peak }}</text>
+  {% for b in chart.bars %}
+  <g>
+    <title>{{ b.tip }}</title>
+    {% for seg in b.segments %}{% if seg.h %}<rect class="{{ classes[seg.key] }}" x="{{ b.x }}" y="{{ seg.y }}" width="{{ b.w }}" height="{{ seg.h }}" rx="1.5"/>{% endif %}{% endfor %}
+    {% if b.show_label %}<text class="tick" x="{{ b.cx }}" y="160" text-anchor="middle">{{ b.label }}</text>{% endif %}
+  </g>
+  {% endfor %}
+</svg>
+{% endmacro %}
+
 {% block main %}
-<section class="verdict">
+<section class="result-head" aria-labelledby="verdict-title">
   {% if just_finished %}
   <p class="notice-ok" role="status">Analysis complete. Your log was read in memory and then discarded.</p>
   {% endif %}
-  <p class="filename">{{ row.filename }}</p>
-  <h1>{{ verdict.headline }}</h1>
-  <p class="lede">{{ verdict.detail }}</p>
-  <p class="caveat">These are indicators found in a log, not proof of an attack. Check each one before you act on it.</p>
-  <p class="actions">
-    <a class="btn" href="{{ url_for('download_html', analysis_id=row.id) }}">Download report</a>
-    <a class="btn-quiet" href="{{ url_for('download_csv', analysis_id=row.id) }}">Findings CSV</a>
-    <a class="btn-quiet" href="{{ url_for('download_events_csv', analysis_id=row.id) }}">Events CSV</a>
-    <a class="btn-quiet" href="{{ url_for('download_json', analysis_id=row.id) }}">JSON</a>
-    <a class="btn-quiet" href="{{ url_for('index') }}">Analyze another log</a>
-  </p>
+  <div class="result-top">
+    <div>
+      <p class="eyebrow">Analysis of {{ row.filename }}</p>
+      <h1 id="verdict-title" class="verdict-title">{{ verdict.headline }}</h1>
+      <p class="lede">{{ verdict.detail }}</p>
+      <p class="caveat">Analyzed {{ analyzed_at|dt }}. These are indicators found in a log, not proof of an attack. Check each one before you act on it.</p>
+    </div>
+    <div class="actions" role="group" aria-label="Downloads">
+      {% if pdf_available %}<a class="btn" href="{{ url_for('download_pdf', analysis_id=row.id) }}">Download PDF report</a>{% endif %}
+      <a class="btn-ghost" href="{{ url_for('download_html', analysis_id=row.id) }}">HTML</a>
+      <a class="btn-ghost" href="{{ url_for('download_csv', analysis_id=row.id) }}">Findings CSV</a>
+      <a class="btn-ghost" href="{{ url_for('download_events_csv', analysis_id=row.id) }}">Events CSV</a>
+      <a class="btn-ghost" href="{{ url_for('download_json', analysis_id=row.id) }}">JSON</a>
+      <a class="btn-ghost" href="{{ url_for('index') }}">Analyze another log</a>
+    </div>
+  </div>
 </section>
 
 <section aria-labelledby="overview-title">
   <h2 id="overview-title" class="sr-only">Overview</h2>
   <dl class="kpis">
     <div class="kpi"><dt>Events analyzed</dt><dd>{{ data.summary.total_events }}</dd></div>
-    <div class="kpi"><dt>Failed logins</dt><dd>{{ data.summary.failed }}</dd></div>
+    <div class="kpi kpi-fail"><dt>Failed logins</dt><dd>{{ data.summary.failed }}</dd><span class="kpi-note">{{ donut.failed_label }} of events</span></div>
     <div class="kpi kpi-flag"><dt>Suspicious events</dt><dd>{{ data.summary.suspicious_events|default(0) }}</dd></div>
     <div class="kpi"><dt>Findings</dt><dd>{{ data.findings|length }}</dd></div>
     <div class="kpi"><dt>Source addresses</dt><dd>{{ data.summary.unique_ips }}</dd></div>
   </dl>
+</section>
 
-  <div class="dash">
-    <div class="dash-card">
-      <h3>Findings by severity</h3>
-      <svg class="sevchart" viewBox="0 0 320 132" role="group" aria-labelledby="sev-desc">
-        <desc id="sev-desc">Number of findings per severity. Select a row to filter the lists below.</desc>
-        {% for b in severity_bars %}
-        <a href="{{ url_for('view_analysis', analysis_id=row.id, severity=b.name) }}#findings" aria-label="{{ b.name|capitalize }}: {{ b.count }}">
-          <rect class="hit" x="0" y="{{ loop.index0 * 33 + 2 }}" width="320" height="26"/>
-          <text class="sev-label" x="0" y="{{ loop.index0 * 33 + 20 }}">{{ b.name|capitalize }}</text>
-          <rect class="sev-track" x="70" y="{{ loop.index0 * 33 + 6 }}" width="200" height="18" rx="2"/>
-          {% if b.count %}<rect class="sev-bar sevfill-{{ b.name }}" x="70" y="{{ loop.index0 * 33 + 6 }}" width="{{ (b.width * 2)|round(1) }}" height="18" rx="2"/>{% endif %}
-          <text class="sev-count" x="282" y="{{ loop.index0 * 33 + 20 }}">{{ b.count }}</text>
-        </a>
-        {% endfor %}
+<section class="grid-3" aria-label="Security analytics">
+  <div class="card">
+    <h2 class="card-title">Findings by severity</h2>
+    <svg class="bars" viewBox="0 0 320 136" role="group" aria-labelledby="sev-desc">
+      <desc id="sev-desc">Number of findings per severity. Select a row to filter the findings below.</desc>
+      {% for b in severity_bars %}
+      <a href="{{ url_for('view_analysis', analysis_id=row.id, severity=b.name) }}#findings" aria-label="{{ b.name|capitalize }}: {{ b.count }}">
+        <rect class="hit" x="0" y="{{ loop.index0 * 34 + 2 }}" width="320" height="28"/>
+        <text class="bar-label" x="0" y="{{ loop.index0 * 34 + 21 }}">{{ b.name|capitalize }}</text>
+        <rect class="track" x="68" y="{{ loop.index0 * 34 + 8 }}" width="204" height="16" rx="3"/>
+        {% if b.count %}<rect class="fill fill-{{ b.name }}" x="68" y="{{ loop.index0 * 34 + 8 }}" width="{{ (b.width * 2.04)|round(1) }}" height="16" rx="3"/>{% endif %}
+        <text class="bar-count" x="316" y="{{ loop.index0 * 34 + 21 }}">{{ b.count }}</text>
+      </a>
+      {% endfor %}
+    </svg>
+  </div>
+
+  <div class="card">
+    <h2 class="card-title">Failed vs successful logins</h2>
+    <div class="donut-wrap">
+      <svg class="donut" viewBox="0 0 42 42" role="img" aria-label="{{ donut.failed }} failed and {{ donut.accepted }} successful logins out of {{ donut.total }}">
+        <circle class="donut-track" cx="21" cy="21" r="15.9155" fill="none" stroke-width="5"/>
+        {% if donut.total %}
+        <circle class="donut-ok" cx="21" cy="21" r="15.9155" fill="none" stroke-width="5" stroke-dasharray="{{ donut.accepted_pct }} {{ donut.failed_pct }}" stroke-dashoffset="25"/>
+        <circle class="donut-fail" cx="21" cy="21" r="15.9155" fill="none" stroke-width="5" stroke-dasharray="{{ donut.failed_pct }} {{ donut.accepted_pct }}" stroke-dashoffset="{{ (25 - donut.accepted_pct)|round(2) }}"/>
+        {% endif %}
+        <text class="donut-total" x="21" y="21.5" text-anchor="middle">{{ donut.total }}</text>
+        <text class="donut-sub" x="21" y="26.5" text-anchor="middle">events</text>
       </svg>
+      <ul class="legend">
+        <li><span class="dot dot-fail"></span><b>{{ donut.failed }}</b> failed</li>
+        <li><span class="dot dot-ok"></span><b>{{ donut.accepted }}</b> successful</li>
+      </ul>
     </div>
+  </div>
 
-    <div class="dash-card">
-      <h3>Recent suspicious activity</h3>
-      {% if recent %}
-      <ol class="recent">
-        {% for e in recent %}
-        <li class="sev-{{ e.severity }}"><span class="sev">{{ e.severity|capitalize }}</span>
-          <span class="rtime">{{ e.time|dt }}</span>
-          <span class="rwhat">{{ e.type }} for <span class="addr">{{ e.user }}</span> from <span class="addr">{{ e.ip }}</span></span></li>
-        {% endfor %}
-      </ol>
-      {% else %}
-      <p class="empty">No suspicious events in this log.</p>
-      {% endif %}
-    </div>
+  <div class="card">
+    <h2 class="card-title">Security events distribution</h2>
+    {% if distribution %}
+    <svg class="bars" viewBox="0 0 320 {{ distribution|length * 34 + 2 }}" role="img" aria-label="Events by type: {% for d in distribution %}{{ d.label }} {{ d.count }}{{ ', ' if not loop.last }}{% endfor %}">
+      {% for d in distribution %}
+      <text class="bar-label small" x="0" y="{{ loop.index0 * 34 + 12 }}">{{ d.label }}</text>
+      <rect class="track" x="0" y="{{ loop.index0 * 34 + 17 }}" width="270" height="10" rx="3"/>
+      <rect class="fill {{ 'fill-fail' if d.kind == 'failed' else 'fill-ok' }}" x="0" y="{{ loop.index0 * 34 + 17 }}" width="{{ (d.width * 2.7)|round(1) }}" height="10" rx="3"/>
+      <text class="bar-count" x="316" y="{{ loop.index0 * 34 + 27 }}">{{ d.count }}</text>
+      {% endfor %}
+    </svg>
+    {% endif %}
   </div>
 </section>
 
-<section aria-labelledby="hours-title">
-  <h2 id="hours-title">Logins by hour of day</h2>
-  <p class="section-note">Select an hour to filter findings and events to that hour.</p>
-  <svg class="chart" viewBox="0 0 720 176" role="group" aria-labelledby="chart-desc">
-    <desc id="chart-desc">Bar chart of failed and accepted logins for each hour of the day. The busiest hour had {{ chart.peak }} events.</desc>
-    <line class="axis" x1="0" y1="{{ chart.baseline }}" x2="720" y2="{{ chart.baseline }}"/>
-    {% for b in chart.bars %}
-    <a href="{{ url_for('view_analysis', analysis_id=row.id, hour=b.hour) }}#findings" aria-label="{{ b.tip }}"{% if filters.hour == b.hour %} class="hour-on"{% endif %}>
-      <title>{{ b.tip }}</title>
-      <rect class="hit" x="{{ b.x - 5 }}" y="0" width="30" height="{{ chart.baseline + 20 }}"/>
-      {% if b.failed_h %}<rect class="bar-fail" x="{{ b.x }}" y="{{ b.failed_y }}" width="20" height="{{ b.failed_h }}"/>{% endif %}
-      {% if b.accepted_h %}<rect class="bar-ok" x="{{ b.x }}" y="{{ b.accepted_y }}" width="20" height="{{ b.accepted_h }}"/>{% endif %}
-      {% if b.show_label %}<text class="tick" x="{{ b.x + 10 }}" y="168" text-anchor="middle">{{ b.label }}</text>{% endif %}
-    </a>
-    {% endfor %}
-  </svg>
-  <p class="key"><span class="swatch swatch-fail"></span>Failed <span class="swatch swatch-ok"></span>Accepted</p>
+<section class="grid-2" aria-label="Activity over time">
+  <div class="card">
+    <h2 class="card-title">Login activity over time</h2>
+    <p class="card-note">Each bar covers {{ activity_chart.hours|default(1) }} hour{{ 's' if activity_chart.hours|default(1) != 1 }}. Hours are the log's own clock.</p>
+    {{ column_chart(activity_chart, {'accepted': 'col-ok', 'failed': 'col-fail'}, 'Failed and successful logins over time') }}
+    <p class="key"><span class="dot dot-ok"></span>Successful <span class="dot dot-fail"></span>Failed</p>
+  </div>
+  <div class="card">
+    <h2 class="card-title">Suspicious activity over time</h2>
+    <p class="card-note">Events that support a finding, grouped by time.</p>
+    {{ column_chart(suspicious_chart, {'suspicious': 'col-flag'}, 'Suspicious events over time') }}
+    <p class="key"><span class="dot dot-flag"></span>Suspicious events</p>
+  </div>
+</section>
+
+<section class="grid-2" aria-label="Sources and timeline">
+  <div class="card">
+    <h2 class="card-title">Top source addresses</h2>
+    {% if source_bars %}
+    <ol class="rank">
+      {% for s in source_bars %}
+      <li>
+        <span class="addr">{{ s.ip }}</span>
+        <svg class="rank-bar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true" focusable="false"><rect class="track" x="0" y="0" width="100" height="6" rx="3"/><rect class="fill fill-fail" x="0" y="0" width="{{ s.width }}" height="6" rx="3"/></svg>
+        <span class="rank-n">{{ s.failures }} failed<span class="muted"> · {{ s.distinct_users }} account{{ 's' if s.distinct_users != 1 }}</span></span>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="empty">There were no failed logins in this log.</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2 class="card-title">Suspicious activity timeline</h2>
+    {% if finding_timeline %}
+    <ol class="timeline">
+      {% for f in finding_timeline %}
+      <li class="tl-{{ f.severity }}">
+        <span class="tl-dot" aria-hidden="true"></span>
+        <p class="tl-when">{{ f.first_seen|dt }}</p>
+        <p class="tl-title"><span class="pill pill-{{ f.severity }}">{{ f.severity|capitalize }}</span> {{ f.title }}</p>
+        <p class="tl-sub"><span class="addr">{{ f.ip }}</span> · {{ f.count }} event{{ 's' if f.count != 1 }}</p>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="empty">No suspicious activity in this log.</p>
+    {% endif %}
+  </div>
 </section>
 
 <section id="findings" aria-labelledby="findings-title">
-  <h2 id="findings-title">Findings</h2>
+  <h2 id="findings-title" class="section-title">Security findings</h2>
 
-  <form class="filters" method="get" action="{{ url_for('view_analysis', analysis_id=row.id) }}#findings" id="filter-form">
+  <form class="filters card" method="get" action="{{ url_for('view_analysis', analysis_id=row.id) }}#findings" id="filter-form">
     <label>Search
       <input type="search" name="q" value="{{ filters.q }}" maxlength="64" placeholder="Address, account or text" id="filter-q">
     </label>
@@ -109,7 +178,7 @@
       </select>
     </label>
     <div class="filter-actions">
-      <button class="btn-quiet" type="submit">Apply</button>
+      <button class="btn-ghost" type="submit">Apply</button>
       {% if filtered %}<a class="btn-link" href="{{ url_for('view_analysis', analysis_id=row.id) }}#findings">Reset</a>{% endif %}
     </div>
   </form>
@@ -122,20 +191,45 @@
     <li class="finding sev-{{ f.severity }}" data-filter-text="{{ f.title }} {{ f.ip }} {{ f.users|join(' ') }}">
       <details{% if loop.first %} open{% endif %}>
         <summary>
-          <span class="sev">{{ f.severity|capitalize }}</span>
+          <span class="pill pill-{{ f.severity }}">{{ f.severity|capitalize }}</span>
           <span class="ftitle">{{ f.title }}</span>
           <span class="fwhen">{{ f.first_seen|dt }}</span>
         </summary>
         <div class="fbody">
-          <p>{{ f.description }}</p>
-          <p class="assess"><strong>{{ f.assessment|default('Suspicious indicator') }}.</strong> {{ f.reason }}</p>
-          <dl class="facts">
-            <div><dt>Source address</dt><dd class="addr">{{ f.ip }}</dd></div>
-            <div><dt>Accounts</dt><dd>{{ f.users[:8]|join(', ') }}{% if f.users|length > 8 %} and {{ f.users|length - 8 }} more{% endif %}</dd></div>
-            <div><dt>Events</dt><dd>{{ f.count }}</dd></div>
-            <div><dt>MITRE ATT&amp;CK</dt><dd><a href="https://attack.mitre.org/techniques/{{ f.mitre.id|replace('.', '/') }}/" rel="noopener noreferrer">{{ f.mitre.id }} {{ f.mitre.name }}</a></dd></div>
-          </dl>
-          <p class="todo"><strong>What to do:</strong> {{ f.recommendation }}</p>
+          <p class="assess"><strong>{{ f.assessment|default('Suspicious indicator') }}.</strong> {{ f.description }}</p>
+
+          <div class="fcols">
+            <div>
+              <h3>Evidence from the log</h3>
+              <dl class="facts">
+                <div><dt>Source address</dt><dd class="addr">{{ f.ip }}</dd></div>
+                <div><dt>Accounts</dt><dd>{{ f.users[:8]|join(', ') }}{% if f.users|length > 8 %} and {{ f.users|length - 8 }} more{% endif %}</dd></div>
+                <div><dt>Events</dt><dd>{{ f.count }}</dd></div>
+                <div><dt>First seen</dt><dd>{{ f.first_seen|dt }}</dd></div>
+                <div><dt>Last seen</dt><dd>{{ f.last_seen|dt }}</dd></div>
+                <div><dt>MITRE ATT&amp;CK</dt><dd><a href="https://attack.mitre.org/techniques/{{ f.mitre.id|replace('.', '/') }}/" rel="noopener noreferrer">{{ f.mitre.id }} {{ f.mitre.name }}</a></dd></div>
+              </dl>
+              {% if f.evidence %}
+              <div class="table-wrap">
+              <table class="data evidence-table">
+                <caption class="sr-only">First events behind this finding</caption>
+                <thead><tr><th scope="col">Time</th><th scope="col">Event</th><th scope="col">Account</th></tr></thead>
+                <tbody>
+                  {% for e in f.evidence %}<tr><td>{{ e.time|dt }}:{{ e.time[17:19] }}</td><td>{{ e.type|capitalize }}</td><td><code>{{ e.user }}</code></td></tr>{% endfor %}
+                </tbody>
+              </table>
+              </div>
+              {% if f.evidence_more %}<p class="fine">and {{ f.evidence_more }} more in the events table below.</p>{% endif %}
+              {% endif %}
+            </div>
+            <div>
+              <h3>Why it was flagged</h3>
+              <p>{{ f.reason }}</p>
+              {% if f.impact %}<h3>Why it matters</h3><p>{{ f.impact }}</p>{% endif %}
+              <h3>Recommended defensive actions</h3>
+              <p>{{ f.recommendation }}</p>
+            </div>
+          </div>
         </div>
       </details>
     </li>
@@ -144,16 +238,16 @@
   {% elif filtered and data.findings %}
   <p class="empty">No findings match these filters. <a href="{{ url_for('view_analysis', analysis_id=row.id) }}#findings">Reset the filters</a>.</p>
   {% else %}
-  <p class="empty">Nothing in this log matched a detection with the current settings. If you expected a finding, lower the thresholds under Detection settings and analyze again.</p>
+  <div class="empty-card"><p class="empty">Nothing in this log matched a detection with the current settings. If you expected a finding, lower the thresholds under Detection settings and analyze again.</p></div>
   {% endif %}
 </section>
 
 <section aria-labelledby="events-title">
-  <h2 id="events-title">Suspicious events</h2>
+  <h2 id="events-title" class="section-title">Suspicious events</h2>
   {% if events %}
   <p class="section-note">Individual log events that support a finding, newest first. Showing {{ events|length }} of {{ events_matching }}{% if events_truncated and not filtered %}; this analysis keeps the first 1000 suspicious events{% endif %}. The Events CSV has every kept row.</p>
-  <div class="table-wrap">
-    <table class="events" id="events-table">
+  <div class="table-wrap card flush">
+    <table class="data events" id="events-table">
       <thead><tr><th scope="col">Time</th><th scope="col">Event</th><th scope="col">Account</th><th scope="col">Source</th><th scope="col">Severity</th><th scope="col">Why flagged</th></tr></thead>
       <tbody>
         {% for e in events %}
@@ -162,7 +256,7 @@
           <td>{{ e.type|capitalize }}</td>
           <td class="addr">{{ e.user }}</td>
           <td class="addr">{{ e.ip }}</td>
-          <td><span class="sev-text-{{ e.severity }}">{{ e.severity|capitalize }}</span></td>
+          <td><span class="pill pill-{{ e.severity }}">{{ e.severity|capitalize }}</span></td>
           <td>{{ e.reason }}</td>
         </tr>
         {% endfor %}
@@ -181,36 +275,18 @@
 
 {% if blocklist %}
 <section aria-labelledby="block-title">
-  <h2 id="block-title">Addresses to block</h2>
+  <h2 id="block-title" class="section-title">Addresses to block</h2>
   <p class="section-note">External addresses behind brute force, spraying or a likely takeover. Check each one before you add it to a firewall.</p>
   <div class="blocklist">
     <textarea id="blocklist" readonly rows="{{ [blocklist|length, 6]|min }}" aria-label="Addresses to block">{{ blocklist|join('\n') }}</textarea>
-    <button class="btn-quiet" type="button" id="copy-blocklist" hidden>Copy addresses</button>
+    <button class="btn-ghost" type="button" id="copy-blocklist" hidden>Copy addresses</button>
   </div>
 </section>
 {% endif %}
 
-<section aria-labelledby="sources-title">
-  <h2 id="sources-title">Where failed logins came from</h2>
-  {% if data.top_sources %}
-  <div class="table-wrap">
-  <table class="sources">
-    <thead><tr><th scope="col">Source address</th><th scope="col" class="num">Failed logins</th><th scope="col" class="num">Accounts tried</th></tr></thead>
-    <tbody>
-      {% for s in data.top_sources %}
-      <tr><td class="addr">{{ s.ip }}</td><td class="num">{{ s.failures }}</td><td class="num">{{ s.distinct_users }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  </div>
-  {% else %}
-  <p class="empty">There were no failed logins in this log.</p>
-  {% endif %}
-</section>
-
-<section class="meta-block" aria-labelledby="meta-title">
-  <h2 id="meta-title">About this analysis</h2>
-  <dl class="facts">
+<section class="meta-block card" aria-labelledby="meta-title">
+  <h2 id="meta-title" class="card-title">About this analysis</h2>
+  <dl class="facts wide-facts">
     <div><dt>Brute force</dt><dd>{{ data.settings.brute_force_failures }} failures within {{ data.settings.brute_force_window_minutes }} minutes</dd></div>
     <div><dt>Spraying</dt><dd>{{ data.settings.spray_users }} accounts within {{ data.settings.spray_window_minutes }} minutes</dd></div>
     <div><dt>Takeover</dt><dd>A login after {{ data.settings.compromise_failures|default(3) }} failures within {{ data.settings.compromise_window_minutes|default(10) }} minutes</dd></div>

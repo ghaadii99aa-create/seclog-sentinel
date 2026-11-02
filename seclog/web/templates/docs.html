@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}API reference - SecLog Sentinel{% endblock %}
+
+{% block main %}
+<section class="page-head">
+  <p class="eyebrow">REST API</p>
+  <h1>API reference</h1>
+  <p class="lede">The web app and the API share one analysis engine. Every response is JSON, errors included. The API sends no CORS headers, so call it from a server or script, not from another website.</p>
+</section>
+
+<section class="panel-section" aria-label="Endpoints">
+  {% for s in sections %}
+  <article class="card endpoint" id="{{ s.title|lower|replace(' ', '-') }}">
+    <h2 class="card-title"><span class="method method-{{ s.method|lower }}">{{ s.method }}</span> <code>{{ s.path }}</code></h2>
+    <p><strong>{{ s.title }}.</strong> {{ s.summary }}</p>
+    {% if s.fields %}
+    <div class="table-wrap">
+    <table class="data">
+      <caption class="sr-only">Form fields for {{ s.path }}</caption>
+      <thead><tr><th scope="col">Field</th><th scope="col">Default</th><th scope="col">Values</th></tr></thead>
+      <tbody>{% for f in s.fields %}<tr><td><code>{{ f.name }}</code></td><td>{{ f.default }}</td><td>{{ f.values }}</td></tr>{% endfor %}</tbody>
+    </table>
+    </div>
+    {% endif %}
+    <h3>Example</h3>
+    <pre tabindex="0" aria-label="Example request"><code>{{ s.example.replace('{base}', request.host_url.rstrip('/')) }}</code></pre>
+    <h3>Responses</h3>
+    <ul class="responses">{% for code, text in s.responses %}<li><span class="code code-{{ code[0] }}">{{ code }}</span> {{ text }}</li>{% endfor %}</ul>
+  </article>
+  {% endfor %}
+
+  <article class="card endpoint">
+    <h2 class="card-title">Errors</h2>
+    <p>Every error has the same shape, with a message that says how to fix the problem.</p>
+    <pre tabindex="0" aria-label="Error examples"><code>{% for code, body in error_examples %}{{ code }}  {{ body }}
+{% endfor %}</code></pre>
+  </article>
+</section>
+{% endblock %}

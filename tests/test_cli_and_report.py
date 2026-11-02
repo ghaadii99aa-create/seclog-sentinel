@@ -142,3 +142,40 @@ class CsvAndCliTests(unittest.TestCase):
             main([str(SAMPLE), "--year", "2026", "-q", "--compromise-failures", "50", "--json", str(out)])
             rules = {f["rule"] for f in json.loads(out.read_text())["findings"]}
             self.assertNotIn("success_after_failures", rules)
+
+
+class PdfAndAnalyticsTests(unittest.TestCase):
+    def setUp(self):
+        from seclog.parser import parse_log
+
+        self.analysis = analyze(parse_log(SAMPLE.read_text(encoding="utf-8").splitlines(), year=2026).events)
+
+    def test_cli_writes_pdf(self):
+        try:
+            import reportlab  # noqa: F401
+        except ImportError:
+            self.skipTest("reportlab not installed")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "r.pdf"
+            self.assertEqual(main([str(SAMPLE), "--year", "2026", "--pdf", str(path), "-q"]), 0)
+            self.assertTrue(path.read_bytes().startswith(b"%PDF-"))
+
+    def test_analytics_add_up_to_the_summary(self):
+        a = self.analysis.to_dict()
+        s = a["summary"]
+        self.assertEqual(sum(t["count"] for t in a["event_types"]), s["total_events"])
+        self.assertEqual(sum(b["failed"] + b["accepted"] for b in a["timeline"]), s["total_events"])
+        self.assertEqual(sum(b["suspicious"] for b in a["timeline"]), s["suspicious_events"])
+        self.assertEqual(sum(a["suspicious_hourly"]), s["suspicious_events"])
+        self.assertEqual(len(a["suspicious_hourly"]), 24)
+
+    def test_every_finding_explains_impact(self):
+        for finding in self.analysis.findings:
+            self.assertTrue(finding.impact and finding.reason and finding.recommendation)
+
+    def test_evidence_matches_finding_counts(self):
+        from seclog.analyzer import events_for_finding
+
+        a = self.analysis.to_dict()
+        for finding in a["findings"]:
+            self.assertEqual(len(events_for_finding(finding, a["events"])), finding["count"])

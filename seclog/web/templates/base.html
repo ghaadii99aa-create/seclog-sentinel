@@ -3,30 +3,40 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}SecLog Sentinel{% endblock %}</title>
-  <meta name="description" content="Upload an SSH log and see brute-force attacks, password spraying and compromised accounts, with what to do next.">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0a1628">
+  <title>{% block title %}SecLog Sentinel - Cloud-Based Security Log Analysis Platform{% endblock %}</title>
+  <meta name="description" content="Upload an SSH log and get brute-force, password-spraying and account-takeover findings mapped to MITRE ATT&amp;CK, with analytics, a PDF report and what to do next.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="SecLog Sentinel">
-  <meta property="og:title" content="SecLog Sentinel: find who is guessing your server's passwords">
-  <meta property="og:description" content="Upload an SSH log and get brute-force, password-spraying and account-takeover findings mapped to MITRE ATT&amp;CK, with what to do next.">
+  <meta property="og:title" content="SecLog Sentinel: Cloud-Based Security Log Analysis Platform">
+  <meta property="og:description" content="Upload an SSH log and get brute-force, password-spraying and account-takeover findings mapped to MITRE ATT&amp;CK, with charts and a PDF report.">
   <meta property="og:url" content="{{ request.base_url }}">
   <meta property="og:image" content="{{ url_for('static', filename='og.png', _external=True) }}">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="627">
-  <meta property="og:image:alt" content="Log lines from an SSH brute-force attack, highlighted by SecLog Sentinel">
+  <meta property="og:image:alt" content="SecLog Sentinel dashboard showing findings by severity and failed versus successful logins">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="author" content="Ghadi Alharthy">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 4 7v8c0 7.5 5 13.5 12 15 7-1.5 12-7.5 12-15V7z' fill='%2314232b'/%3E%3Cpath d='m11 16 4 4 7-8' fill='none' stroke='%23fff' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 4 7v8c0 7.5 5 13.5 12 15 7-1.5 12-7.5 12-15V7z' fill='%2338bdf8'/%3E%3Cpath d='m11 16 4 4 7-8' fill='none' stroke='%230a1628' stroke-width='3'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
   <header class="masthead">
-    <a class="wordmark" href="{{ url_for('index') }}">SecLog Sentinel</a>
-    <nav aria-label="Main">
-      <a href="{{ url_for('history') }}">Your analyses</a>
-    </nav>
+    <div class="masthead-inner">
+      <a class="brand" href="{{ url_for('index') }}" aria-label="SecLog Sentinel home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M16 2 4 7v8c0 7.5 5 13.5 12 15 7-1.5 12-7.5 12-15V7z" class="mark-shield"/><path d="m11 16 4 4 7-8" class="mark-check"/></svg>
+        <span class="brand-name">SecLog <b>Sentinel</b></span>
+      </a>
+      <nav aria-label="Main" class="nav">
+        <a href="{{ url_for('index') }}"{% if request.endpoint == 'index' %} aria-current="page"{% endif %}>Analyze</a>
+        <a href="{{ url_for('history') }}"{% if request.endpoint == 'history' %} aria-current="page"{% endif %}>Your analyses</a>
+        <a href="{{ url_for('api_docs') }}"{% if request.endpoint == 'api_docs' %} aria-current="page"{% endif %}>API</a>
+        {% if repo_url %}<a href="{{ repo_url }}" rel="noopener noreferrer">GitHub</a>{% endif %}
+      </nav>
+    </div>
   </header>
 
   <main id="main">
@@ -34,16 +44,38 @@
   </main>
 
   <footer class="colophon">
-    {% if ephemeral %}
-    <p>Your log is analyzed in memory and is not stored. This demo server resets when idle, so saved results can disappear. Download the report to keep a copy.</p>
-    {% else %}
-    <p>Your log is analyzed in memory and is not stored. Only the results are kept, for {{ retention_days }} days.</p>
-    {% endif %}
-    <p>
-      Version {{ version }}.
-      {% if repo_url %}<a href="{{ repo_url }}">View the source code</a>.{% endif %}
-      <a href="{{ url_for('healthz') }}">Status</a>.
-    </p>
+    <div class="colophon-inner">
+      <div class="colophon-brand">
+        <p class="brand-name">SecLog <b>Sentinel</b></p>
+        <p>Cloud-based security log analysis. Upload, analyze, visualize, report.</p>
+        <p class="fine">Built by Ghadi Alharthy, Information Technology graduate specializing in Information Security.</p>
+      </div>
+      <div>
+        <h2 class="foot-h">Product</h2>
+        <ul>
+          <li><a href="{{ url_for('index') }}">Analyze a log</a></li>
+          <li><a href="{{ url_for('history') }}">Your analyses</a></li>
+          <li><a href="{{ url_for('api_docs') }}">API reference</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2 class="foot-h">Project</h2>
+        <ul>
+          {% if repo_url %}<li><a href="{{ repo_url }}" rel="noopener noreferrer">Source code</a></li>
+          <li><a href="{{ repo_url }}/blob/main/docs/SECURITY.md" rel="noopener noreferrer">Security review</a></li>{% endif %}
+          <li><a href="{{ url_for('healthz') }}">Service status</a></li>
+          <li><a href="https://attack.mitre.org/" rel="noopener noreferrer">MITRE ATT&amp;CK</a></li>
+        </ul>
+      </div>
+      <div class="colophon-note">
+        {% if ephemeral %}
+        <p>Your log is analyzed in memory and is not stored. This demo server resets when idle, so saved results can disappear. Download the report to keep a copy.</p>
+        {% else %}
+        <p>Your log is analyzed in memory and is not stored. Only the results are kept, for {{ retention_days }} days.</p>
+        {% endif %}
+        <p class="fine">Findings are indicators found in a log, not proof of an attack. Version {{ version }}.</p>
+      </div>
+    </div>
   </footer>
 </body>
 </html>

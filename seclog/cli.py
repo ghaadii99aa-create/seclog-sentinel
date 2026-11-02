@@ -32,6 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("logfile", help="Path to an sshd auth log, or '-' for stdin")
     parser.add_argument("--year", type=int, help="Year of the log (syslog lines have none). Default: current year")
     parser.add_argument("--html", metavar="FILE", help="Write an HTML report to FILE")
+    parser.add_argument("--pdf", metavar="FILE", help="Write a branded PDF report to FILE (needs reportlab)")
     parser.add_argument("--json", metavar="FILE", help="Write a JSON report to FILE")
     parser.add_argument("--csv", metavar="FILE", help="Write the findings as CSV to FILE")
     parser.add_argument("--events-csv", metavar="FILE", help="Write the suspicious events as CSV to FILE")
@@ -132,6 +133,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             Path(args.html).write_text(render_html(analysis, source_name), encoding="utf-8")
             if not args.quiet:
                 print(f"HTML report written to {args.html}")
+        if args.pdf:
+            from .pdf_report import PdfUnavailable, render_pdf
+
+            try:
+                Path(args.pdf).write_bytes(render_pdf(analysis, source_name))
+            except PdfUnavailable:
+                print("seclog: PDF reports need reportlab. Install it with: pip install reportlab", file=sys.stderr)
+                return 1
+            if not args.quiet:
+                print(f"PDF report written to {args.pdf}")
         if args.json:
             Path(args.json).write_text(render_json(analysis), encoding="utf-8")
             if not args.quiet:

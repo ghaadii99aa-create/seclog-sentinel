@@ -96,7 +96,7 @@ curl https://seclog-sentinel.onrender.com/api/analyses/W8AwvZnWoick
 ## `GET /healthz`
 
 Liveness check used by Render and by the Docker `HEALTHCHECK`. Returns `200` with
-`{"status": "ok", "version": "1.1.0"}`.
+`{"status": "ok", "version": "1.2.0"}`.
 
 ## Downloads (not JSON endpoints)
 
@@ -109,3 +109,12 @@ spreadsheet formula.
 
 `405` for a wrong method, and `404` for an unknown path, are also returned as `{"error": …}`
 under `/api/`.
+
+
+## PDF report and the `/docs` page
+
+`GET /a/<id>/report.pdf` returns a branded PDF (cover page, summary, severity distribution, charts,
+findings with evidence, why it matters and defensive actions, analysis date). It returns `503` with a JSON
+error if ReportLab is not installed. The same reference is rendered at `/docs`, and a test checks that
+every route listed there exists. New fields in the analysis JSON: `event_types`, `timeline`,
+`suspicious_hourly`, and `impact` on each finding.

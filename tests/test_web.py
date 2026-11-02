@@ -264,7 +264,8 @@ class ApiTests(WebTestCase):
         body = response.get_json()
         self.assertEqual(response.mimetype, "application/json")
         self.assertEqual(
-            set(body), {"id", "url", "api_url", "summary", "top_sources", "hourly", "findings", "events", "settings"}
+            set(body), {"id", "url", "api_url", "summary", "top_sources", "hourly", "event_types", "timeline",
+                "suspicious_hourly", "findings", "events", "settings"}
         )
         self.assertEqual(
             set(body["summary"]),
@@ -275,7 +276,7 @@ class ApiTests(WebTestCase):
         self.assertEqual(
             set(finding),
             {"rule", "title", "severity", "ip", "users", "count", "first_seen", "last_seen", "mitre",
-             "description", "recommendation", "reason", "assessment"},
+             "description", "recommendation", "reason", "assessment", "impact"},
         )
         self.assertEqual(len(body["hourly"]), 24)
         self.assertEqual(body["summary"]["suspicious_events"], 6)
@@ -400,17 +401,22 @@ class DashboardTests(WebTestCase):
         ):
             self.assertRegex(html, rf"<dt>{label}</dt><dd>{value}</dd>")
 
+    def findings_section(self, query=""):
+        """Only the findings list (the timeline above it always shows every finding)."""
+        html = self.page(query)
+        return html.split('id="findings"')[1].split('id="events-title"')[0]
+
     def test_recent_activity_and_severity_chart_present(self):
         html = self.page()
-        self.assertIn("Recent suspicious activity", html)
+        self.assertIn("Suspicious activity timeline", html)
         self.assertIn("Findings by severity", html)
         self.assertIn("severity=critical", html)
 
     def test_filter_by_severity(self):
-        html = self.page("?severity=critical")
-        self.assertIn("Showing 1 of 5 findings", html)
+        html = self.findings_section("?severity=critical")
         self.assertIn("Possible account compromise", html)
         self.assertNotIn("Password spraying from", html)
+        self.assertIn("Showing 1 of 5 findings", self.page("?severity=critical"))
 
     def test_filter_by_rule(self):
         html = self.page("?rule=password_spraying")
@@ -421,7 +427,7 @@ class DashboardTests(WebTestCase):
         self.assertIn("Showing 1 of 5 findings", html)
 
     def test_filter_by_hour(self):
-        html = self.page("?hour=4")
+        html = self.findings_section("?hour=4")
         self.assertIn("Password spraying from", html)
         self.assertNotIn("Possible account compromise", html)
 
@@ -604,3 +610,134 @@ class StorageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(SAMPLE.exists(), "sample log missing")
+class ProfessionalUiTests(WebTestCase):
+    def setUp(self):
+        super().setUp()
+        self.location = base_path(self.client.post("/analyze/sample").headers["Location"])
+        self.html = self.client.get(self.location).get_data(as_text=True)
+        self.api = self.client.get("/api/analyses/" + self.location.rsplit("/", 1)[1]).get_json()
+
+    def test_every_analytics_section_is_present(self):
+        for heading in ("Findings by severity", "Failed vs successful logins", "Security events distribution",
+                        "Login activity over time", "Suspicious activity over time",
+                        "Top source addresses", "Suspicious activity timeline", "Security findings"):
+            with self.subTest(heading=heading):
+                self.assertIn(heading, self.html)
+
+    def test_charts_use_real_numbers(self):
+        summary = self.api["summary"]
+        self.assertIn(f'aria-label="{summary["failed"]} failed and {summary["accepted"]} successful logins', self.html)
+        for source in self.api["top_sources"]:
+            self.assertIn(source["ip"], self.html)
+        self.assertEqual(sum(b["suspicious"] for b in self.api["timeline"]), summary["suspicious_events"])
+        self.assertEqual(sum(b["failed"] + b["accepted"] for b in self.api["timeline"]), summary["total_events"])
+        self.assertEqual(sum(t["count"] for t in self.api["event_types"]), summary["total_events"])
+        self.assertEqual(sum(self.api["suspicious_hourly"]), summary["suspicious_events"])
+
+    def test_finding_has_evidence_impact_and_mitre(self):
+        for text in ("Evidence from the log", "Why it was flagged", "Why it matters",
+                     "Recommended defensive actions", "attack.mitre.org/techniques/T1110/001/"):
+            self.assertIn(text, self.html)
+        for finding in self.api["findings"]:
+            self.assertTrue(finding["impact"])
+
+    def test_charts_have_text_alternatives_and_no_inline_style(self):
+        self.assertNotIn(' style="', self.html)
+        self.assertNotIn("<script>", self.html)
+        self.assertGreaterEqual(self.html.count('role="img"'), 4)
+        self.assertIn('<main id="main">', self.html)
+        self.assertIn('class="skip"', self.html)
+
+    def test_navigation_marks_current_page(self):
+        self.assertIn('aria-current="page"', self.client.get("/").get_data(as_text=True))
+        self.assertIn('aria-current="page"', self.client.get("/docs").get_data(as_text=True))
+
+    def test_homepage_message_and_steps(self):
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertIn("Cloud-Based Security Log Analysis Platform", html)
+        for step in ("Upload", "Analyze", "Visualize", "Report"):
+            self.assertIn(f"<h3>{step}</h3>", html)
+        self.assertIn("<footer", html)
+
+
+@unittest.skipUnless(SAMPLE.exists(), "sample log missing")
+class PdfReportTests(WebTestCase):
+    def setUp(self):
+        super().setUp()
+        self.location = base_path(self.client.post("/analyze/sample").headers["Location"])
+
+    def test_pdf_download(self):
+        response = self.client.get(self.location + "/report.pdf")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/pdf")
+        self.assertTrue(response.data.startswith(b"%PDF-"))
+        self.assertIn("attachment", response.headers["Content-Disposition"])
+        self.assertGreater(len(response.data), 5000)
+
+    def test_pdf_unknown_id_is_404(self):
+        self.assertEqual(self.client.get("/a/doesnotexist/report.pdf").status_code, 404)
+
+    def test_pdf_handles_hostile_and_empty_input(self):
+        from datetime import datetime
+
+        from seclog.analyzer import analyze
+        from seclog.parser import parse_log
+        from seclog.pdf_report import render_pdf
+
+        hostile = (
+            "Oct 20 03:00:%02d srv sshd[1]: Failed password for <b>&amp;{{7*7}}%%s from 203.0.113.9 port 22 ssh2\n"
+        )
+        events_log = "".join(hostile % i for i in range(10))
+        result = analyze(parse_log(events_log.splitlines(), year=2026).events)
+        self.assertTrue(render_pdf(result, "x<y>.log", datetime(2026, 11, 2)).startswith(b"%PDF-"))
+        clean = analyze(parse_log(
+            ["Oct 20 03:00:01 srv sshd[1]: Accepted password for kim from 10.0.0.2 port 22 ssh2"], year=2026
+        ).events)
+        self.assertTrue(render_pdf(clean, "clean.log", datetime(2026, 11, 2)).startswith(b"%PDF-"))
+
+    def test_pdf_returns_503_when_reportlab_missing(self):
+        from seclog.pdf_report import PdfUnavailable
+        from seclog.web import app as app_module
+
+        def boom(*args, **kwargs):
+            raise PdfUnavailable()
+
+        original = app_module.render_pdf
+        app_module.render_pdf = boom
+        try:
+            self.assertEqual(self.client.get(self.location + "/report.pdf").status_code, 503)
+        finally:
+            app_module.render_pdf = original
+
+    def test_other_exports_still_work(self):
+        for suffix, mimetype in (("/report.json", "application/json"), ("/report.csv", "text/csv"),
+                                 ("/events.csv", "text/csv"), ("/report.html", "text/html")):
+            with self.subTest(suffix=suffix):
+                response = self.client.get(self.location + suffix)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.mimetype, mimetype)
+
+
+class ApiDocsTests(WebTestCase):
+    def test_docs_page_renders(self):
+        response = self.client.get("/docs")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"API reference", response.data)
+
+    def test_every_documented_endpoint_exists(self):
+        from seclog.web.apidocs import API_SECTIONS
+
+        rules = {r.rule: r.methods for r in self.app.url_map.iter_rules()}
+        for section in API_SECTIONS:
+            with self.subTest(path=section["path"]):
+                self.assertIn(section["testable_path"], rules)
+                self.assertIn(section["method"], rules[section["testable_path"]])
+
+    def test_every_setting_documented_is_accepted(self):
+        from seclog.web.apidocs import SETTINGS_FIELDS
+
+        for field in SETTINGS_FIELDS:
+            self.assertIn(field["name"], open(Path(__file__).parent.parent / "seclog" / "web" / "app.py").read())

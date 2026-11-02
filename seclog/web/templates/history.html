@@ -4,13 +4,16 @@
 
 {% block main %}
 <section class="page-head">
+  <p class="eyebrow">History</p>
   <h1>Your analyses</h1>
   <p class="lede">Results from this browser.
     {% if ephemeral %}They disappear when the demo server restarts.{% else %}They are deleted after {{ retention_days }} days.{% endif %}</p>
 </section>
 
+<section class="panel-section" aria-label="Saved analyses">
 {% if items %}
-<table class="history">
+<div class="table-wrap">
+<table class="data history">
   <thead>
     <tr><th scope="col">Log</th><th scope="col">Analyzed</th><th scope="col">Result</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
   </thead>
@@ -21,9 +24,10 @@
       <td>{{ item.row.created_at|when }}</td>
       <td>
         {% if item.worst %}
-          <span class="sev sev-text-{{ item.worst }}">{{ item.total }} finding{{ 's' if item.total != 1 }}, worst is {{ item.worst }}</span>
+          <span class="pill pill-{{ item.worst }}">{{ item.worst|capitalize }}</span>
+          <span class="muted">{{ item.total }} finding{{ 's' if item.total != 1 }}</span>
         {% else %}
-          No findings
+          <span class="pill pill-ok">Clear</span> <span class="muted">No findings</span>
         {% endif %}
       </td>
       <td class="row-actions">
@@ -35,8 +39,12 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% else %}
-<p class="empty">You have not analyzed a log in this browser yet. <a href="{{ url_for('index') }}">Upload a log</a> or try the sample.</p>
-<form method="post" action="{{ url_for('analyze_sample') }}"><button class="btn" type="submit">Analyze the sample log</button></form>
+<div class="empty-card">
+  <p class="empty">You have not analyzed a log in this browser yet. <a href="{{ url_for('index') }}">Upload a log</a> or try the sample.</p>
+  <form method="post" action="{{ url_for('analyze_sample') }}"><button class="btn" type="submit">Analyze the sample log</button></form>
+</div>
 {% endif %}
+</section>
 {% endblock %}
