@@ -69,21 +69,21 @@
 
   <div class="card">
     <h2 class="card-title">Failed vs successful logins</h2>
-    <div class="donut-wrap">
-      <svg class="donut" viewBox="0 0 42 42" role="img" aria-label="{{ donut.failed }} failed and {{ donut.accepted }} successful logins out of {{ donut.total }}">
-        <circle class="donut-track" cx="21" cy="21" r="15.9155" fill="none" stroke-width="5"/>
-        {% if donut.total %}
-        <circle class="donut-ok" cx="21" cy="21" r="15.9155" fill="none" stroke-width="5" stroke-dasharray="{{ donut.accepted_pct }} {{ donut.failed_pct }}" stroke-dashoffset="25"/>
-        <circle class="donut-fail" cx="21" cy="21" r="15.9155" fill="none" stroke-width="5" stroke-dasharray="{{ donut.failed_pct }} {{ donut.accepted_pct }}" stroke-dashoffset="{{ (25 - donut.accepted_pct)|round(2) }}"/>
-        {% endif %}
-        <text class="donut-total" x="21" y="21.5" text-anchor="middle">{{ donut.total }}</text>
-        <text class="donut-sub" x="21" y="26.5" text-anchor="middle">events</text>
-      </svg>
-      <ul class="legend">
-        <li><span class="dot dot-fail"></span><b>{{ donut.failed }}</b> failed</li>
-        <li><span class="dot dot-ok"></span><b>{{ donut.accepted }}</b> successful</li>
-      </ul>
-    </div>
+    <svg class="split" viewBox="0 0 320 30" role="img" aria-label="{{ donut.failed }} failed and {{ donut.accepted }} successful logins out of {{ donut.total }}">
+      {% if donut.total %}
+      <rect class="fill-ok" x="0" y="4" width="320" height="18" rx="2"/>
+      <rect class="fill-fail" x="0" y="4" width="{{ (donut.failed_pct * 3.2)|round(1) }}" height="18" rx="2"/>
+      {% endif %}
+    </svg>
+    <table class="data mini">
+      <caption class="sr-only">Login outcomes</caption>
+      <thead><tr><th scope="col">Outcome</th><th scope="col" class="num">Events</th><th scope="col" class="num">Share</th></tr></thead>
+      <tbody>
+        <tr><td><span class="swatch sw-fail"></span>Failed</td><td class="num">{{ donut.failed }}</td><td class="num">{{ donut.failed_label }}</td></tr>
+        <tr><td><span class="swatch sw-ok"></span>Successful</td><td class="num">{{ donut.accepted }}</td><td class="num">{{ '%d%%' % (donut.accepted_pct|round) }}</td></tr>
+        <tr><td>Total</td><td class="num">{{ donut.total }}</td><td class="num"></td></tr>
+      </tbody>
+    </table>
   </div>
 
   <div class="card">
@@ -106,13 +106,13 @@
     <h2 class="card-title">Login activity over time</h2>
     <p class="card-note">Each bar covers {{ activity_chart.hours|default(1) }} hour{{ 's' if activity_chart.hours|default(1) != 1 }}. Hours are the log's own clock.</p>
     {{ column_chart(activity_chart, {'accepted': 'col-ok', 'failed': 'col-fail'}, 'Failed and successful logins over time') }}
-    <p class="key"><span class="dot dot-ok"></span>Successful <span class="dot dot-fail"></span>Failed</p>
+    <p class="key"><span class="swatch sw-ok"></span>Successful <span class="swatch sw-fail"></span>Failed</p>
   </div>
   <div class="card">
     <h2 class="card-title">Suspicious activity over time</h2>
     <p class="card-note">Events that support a finding, grouped by time.</p>
     {{ column_chart(suspicious_chart, {'suspicious': 'col-flag'}, 'Suspicious events over time') }}
-    <p class="key"><span class="dot dot-flag"></span>Suspicious events</p>
+    <p class="key"><span class="swatch sw-fail"></span>Suspicious events</p>
   </div>
 </section>
 
@@ -193,6 +193,8 @@
         <summary>
           <span class="pill pill-{{ f.severity }}">{{ f.severity|capitalize }}</span>
           <span class="ftitle">{{ f.title }}</span>
+          <span class="fmeta addr">{{ f.ip }}</span>
+          <span class="fmeta">{{ f.count }} event{{ "s" if f.count != 1 }}</span>
           <span class="fwhen">{{ f.first_seen|dt }}</span>
         </summary>
         <div class="fbody">
