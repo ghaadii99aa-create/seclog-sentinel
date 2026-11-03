@@ -418,7 +418,7 @@ class _Report:
         facts = [
             ["Source address", safe(finding["ip"]), "Events", f'{finding["count"]:,}'],
             ["Accounts", safe(", ".join(finding["users"][:6]) + (f' (+{len(finding["users"]) - 6} more)' if len(finding["users"]) > 6 else "")),
-             "MITRE ATT&CK", safe(f'{finding["mitre"]["id"]} {finding["mitre"]["name"]}')],
+             "MITRE ATT&amp;CK", safe(f'{finding["mitre"]["id"]} {finding["mitre"]["name"]}')],
             ["First seen", f"{first:%d %b %Y %H:%M:%S}", "Last seen", f"{last:%d %b %Y %H:%M:%S}"],
         ]
         facts_t = Table(
